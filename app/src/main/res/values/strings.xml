@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">UniSchedule</string>
+    <string name="splash_subtitle">Расписание занятий</string>
+    <string name="selection_title">Выберите группу или преподавателя</string>
+    <string name="toggle_groups">Группы</string>
+    <string name="toggle_teachers">Преподаватели</string>
+    <string name="search_hint">Поиск…</string>
+    <string name="empty_list">Ничего не найдено</string>
+    <string name="prev_week">Предыдущая неделя</string>
+    <string name="next_week">Следующая неделя</string>
+    <string name="no_lessons">Нет занятий</string>
+    <string name="online_badge">онлайн</string>
+    <string name="settings_current_selection">Текущий выбор</string>
+    <string name="settings_change_selection">Изменить</string>
+    <string name="settings_semester">Семестр</string>
+    <string name="settings_change_semester">Изменить дату начала</string>
+    <string name="settings_data">Данные расписания</string>
+    <string name="settings_refresh">Обновить расписание</string>
+    <string name="settings_clear">Очистить все данные</string>
+    <string name="action_settings">Настройки</string>
+    <string name="action_refresh">Обновить</string>
+</resources>
