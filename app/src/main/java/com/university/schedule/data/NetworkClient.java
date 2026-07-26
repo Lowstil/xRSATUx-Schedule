@@ -17,14 +17,11 @@ import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 
-/**
- * Скачивание .xlsx расписания через OkHttp. Репозиторий вызывает downloadSync()
- * из фонового потока, поэтому здесь синхронный execute(). Кэш — файл во
- * внутреннем cacheDir приложения.
- */
 public class NetworkClient {
 
     private static final String TAG = "NetworkClient";
+    /** Имя файла расписания, лежащего в app/src/main/assets/ (офлайн-копия). */
+    private static final String ASSET_NAME = "schedule.xlsx";
 
     private final OkHttpClient client;
     private final Context context;
@@ -39,64 +36,53 @@ public class NetworkClient {
                 .build();
     }
 
-    /** Верхняя граница размера скачиваемого файла — защита от аномально большого/испорченного ответа. */
-    private static final long MAX_DOWNLOAD_BYTES = 50L * 1024 * 1024; // 50 МБ
-
-    /** Синхронно качает файл по url в кэш и возвращает его. Вызывать НЕ из UI-потока. */
+    /** Синхронно качает файл по url в кэш. При ЛЮБОЙ ошибке сети — берёт копию из assets. */
     public File downloadSync(String url) throws IOException {
         Log.d(TAG, "Загрузка: " + url);
-        Request request = new Request.Builder()
-                .url(url)
-                .header("User-Agent", "UniSchedule/1.0 (Android)")
-                .build();
-        try (Response response = client.newCall(request).execute()) {
-            if (!response.isSuccessful()) {
-                throw new IOException("HTTP " + response.code());
+        try {
+            Request request = new Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 13) UniSchedule/1.0")
+                    .build();
+            try (Response response = client.newCall(request).execute()) {
+                if (!response.isSuccessful()) throw new IOException("HTTP " + response.code());
+                ResponseBody body = response.body();
+                if (body == null) throw new IOException("Пустой ответ");
+                File cacheFile = new File(context.getCacheDir(), Constants.CACHE_FILE_NAME);
+                try (InputStream is = body.byteStream();
+                     OutputStream os = new FileOutputStream(cacheFile)) {
+                    byte[] buf = new byte[8192];
+                    int len;
+                    while ((len = is.read(buf)) != -1) os.write(buf, 0, len);
+                    os.flush();
+                }
+                Log.d(TAG, "Сохранено из сети: " + cacheFile.length() + " байт");
+                return cacheFile;
             }
-            ResponseBody body = response.body();
-            if (body == null) throw new IOException("Пустой ответ");
+        } catch (Exception e) {
+            Log.w(TAG, "Сеть недоступна (" + e.getMessage() + "), беру расписание из assets");
+            File f = copyFromAssets();
+            if (f != null) return f;
+            if (e instanceof IOException) throw (IOException) e;
+            throw new IOException(e);
+        }
+    }
 
-            long declaredLength = body.contentLength();
-            if (declaredLength > MAX_DOWNLOAD_BYTES) {
-                throw new IOException("Файл расписания слишком большой: " + declaredLength + " байт");
-            }
-
+    /** Копирует assets/schedule.xlsx в кэш. null, если файла в assets нет. */
+    private File copyFromAssets() {
+        try (InputStream is = context.getAssets().open(ASSET_NAME)) {
             File cacheFile = new File(context.getCacheDir(), Constants.CACHE_FILE_NAME);
-            // Пишем во временный файл и переименовываем только при полном успехе,
-            // чтобы оборванная загрузка (killed process, обрыв сети) никогда
-            // не оставляла в кэше повреждённый .xlsx, который потом молча
-            // считался бы "валидным кэшем" в isCacheValid().
-            File tmpFile = new File(context.getCacheDir(), Constants.CACHE_FILE_NAME + ".tmp");
-            long total = 0;
-            try (InputStream is = body.byteStream();
-                 OutputStream os = new FileOutputStream(tmpFile)) {
+            try (OutputStream os = new FileOutputStream(cacheFile)) {
                 byte[] buf = new byte[8192];
                 int len;
-                while ((len = is.read(buf)) != -1) {
-                    total += len;
-                    if (total > MAX_DOWNLOAD_BYTES) {
-                        throw new IOException("Файл расписания превышает допустимый размер при загрузке");
-                    }
-                    os.write(buf, 0, len);
-                }
+                while ((len = is.read(buf)) != -1) os.write(buf, 0, len);
                 os.flush();
-            } catch (IOException e) {
-                //noinspection ResultOfMethodCallIgnored
-                tmpFile.delete();
-                throw e;
             }
-
-            if (cacheFile.exists() && !cacheFile.delete()) {
-                Log.w(TAG, "Не удалось удалить старый файл кэша перед заменой");
-            }
-            if (!tmpFile.renameTo(cacheFile)) {
-                //noinspection ResultOfMethodCallIgnored
-                tmpFile.delete();
-                throw new IOException("Не удалось сохранить скачанный файл в кэш");
-            }
-
-            Log.d(TAG, "Сохранено: " + cacheFile.length() + " байт");
+            Log.d(TAG, "Взято из assets: " + cacheFile.length() + " байт");
             return cacheFile;
+        } catch (IOException e) {
+            Log.e(TAG, "В assets нет schedule.xlsx: " + e.getMessage());
+            return null;
         }
     }
 
