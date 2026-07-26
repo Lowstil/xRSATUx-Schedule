@@ -13,6 +13,7 @@ import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -64,6 +65,9 @@ public class ExcelParser {
             "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"
     };
 
+    /** Верхняя граница на размер файла расписания — защита от zip-bomb/испорченного ответа сервера. */
+    private static final long MAX_XLSX_SIZE_BYTES = 50L * 1024 * 1024; // 50 МБ
+
     public List<ScheduleItem> parseGroups(InputStream in) throws Exception {
         return parseSheet(in, Constants.SHEET_INDEX_GROUPS, ScheduleDao.SOURCE_GROUP);
     }
@@ -74,7 +78,9 @@ public class ExcelParser {
 
     private List<ScheduleItem> parseSheet(InputStream in, int sheetIndex, String source) throws Exception {
         List<ScheduleItem> result = new ArrayList<>();
-        try (Workbook wb = new XSSFWorkbook(in)) {
+        // Оборачиваем поток, чтобы оборвать разбор, если файл окажется подозрительно большим
+        // (например, из-за подмены ответа сервера или повреждённого архива).
+        try (Workbook wb = new XSSFWorkbook(new BoundedInputStream(in, MAX_XLSX_SIZE_BYTES))) {
             if (sheetIndex >= wb.getNumberOfSheets()) {
                 Log.w(TAG, "Лист #" + sheetIndex + " отсутствует (всего " + wb.getNumberOfSheets() + ")");
                 return result;
@@ -324,5 +330,49 @@ public class ExcelParser {
             return null;
         }
         return null;
+    }
+
+    /**
+     * Простой предохранитель: обрывает чтение, если поток отдал больше байт,
+     * чем разумно ожидать от файла расписания. Защищает от zip-bomb-подобных
+     * ответов сервера при разборе .xlsx (ZIP-контейнера) через Apache POI.
+     */
+    private static final class BoundedInputStream extends InputStream {
+        private final InputStream delegate;
+        private final long maxBytes;
+        private long readSoFar;
+
+        BoundedInputStream(InputStream delegate, long maxBytes) {
+            this.delegate = delegate;
+            this.maxBytes = maxBytes;
+        }
+
+        @Override
+        public int read() throws IOException {
+            checkLimit(1);
+            int b = delegate.read();
+            if (b != -1) readSoFar++;
+            return b;
+        }
+
+        @Override
+        public int read(byte[] b, int off, int len) throws IOException {
+            checkLimit(len);
+            int n = delegate.read(b, off, len);
+            if (n > 0) readSoFar += n;
+            return n;
+        }
+
+        private void checkLimit(int about) throws IOException {
+            if (readSoFar + about > maxBytes) {
+                throw new IOException("Файл расписания превышает допустимый размер ("
+                        + maxBytes + " байт) — разбор остановлен");
+            }
+        }
+
+        @Override
+        public void close() throws IOException {
+            delegate.close();
+        }
     }
 }

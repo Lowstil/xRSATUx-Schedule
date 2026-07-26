@@ -1,8 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    По умолчанию разрешён только HTTPS. Если сайт университета отдаёт
+    файл расписания по обычному http (не https), добавьте домен явно
+    в domain-config ниже — глобально разрешать cleartext для всех
+    хостов не нужно и снижает безопасность приложения.
+-->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="true">
+    <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </base-config>
+    <!--
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">university.ru</domain>
+    </domain-config>
+    -->
 </network-security-config>

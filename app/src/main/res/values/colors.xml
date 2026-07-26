@@ -17,10 +17,4 @@
     <color name="badge_lab">#E65100</color>
     <color name="badge_exam">#C62828</color>
     <color name="badge_default">#616161</color>
-    <color name="state_current_bg">#FFF1E0</color>
-    <color name="state_current_accent">#EF6C00</color>
-    <color name="state_current_text">#BF360C</color>
-    <color name="state_next_bg">#E0F2F1</color>
-    <color name="state_next_accent">#00897B</color>
-    <color name="state_next_text">#004D40</color>
 </resources>

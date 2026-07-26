@@ -14,53 +14,29 @@ import com.university.schedule.model.GroupOrTeacher;
 import java.util.List;
 
 public class SelectionAdapter extends RecyclerView.Adapter<SelectionAdapter.ViewHolder> {
-
-    public interface OnItemSelectedListener {
-        void onItemSelected(GroupOrTeacher item);
-    }
+    public interface OnItemSelectedListener { void onItemSelected(GroupOrTeacher item); }
 
     private List<GroupOrTeacher> items;
     private final OnItemSelectedListener listener;
 
-    public SelectionAdapter(List<GroupOrTeacher> items, OnItemSelectedListener listener) {
-        this.items = items;
-        this.listener = listener;
-    }
+    public SelectionAdapter(List<GroupOrTeacher> items, OnItemSelectedListener l) { this.items = items; this.listener = l; }
+    public void updateData(List<GroupOrTeacher> n) { this.items = n; notifyDataSetChanged(); }
 
-    public void updateData(List<GroupOrTeacher> newItems) {
-        this.items = newItems;
-        notifyDataSetChanged();
+    @NonNull @Override
+    public ViewHolder onCreateViewHolder(@NonNull ViewGroup p, int t) {
+        return new ViewHolder(LayoutInflater.from(p.getContext()).inflate(R.layout.item_selection, p, false));
     }
-
-    @NonNull
-    @Override
-    public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        View v = LayoutInflater.from(parent.getContext())
-                .inflate(R.layout.item_selection, parent, false);
-        return new ViewHolder(v);
-    }
-
     @Override
     public void onBindViewHolder(@NonNull ViewHolder h, int position) {
-        GroupOrTeacher item = items.get(position);
-        h.tvName.setText(item.getName());
-        h.tvType.setText(item.isGroup() ? "Группа" : "Преподаватель");
-        h.itemView.setOnClickListener(v -> {
-            if (listener != null) listener.onItemSelected(item);
-        });
+        GroupOrTeacher it = items.get(position);
+        h.tvName.setText(it.getName());
+        h.tvType.setText(it.isGroup() ? "Группа" : "Преподаватель");
+        h.itemView.setOnClickListener(v -> { if (listener != null) listener.onItemSelected(it); });
     }
-
-    @Override
-    public int getItemCount() {
-        return items != null ? items.size() : 0;
-    }
+    @Override public int getItemCount() { return items != null ? items.size() : 0; }
 
     static class ViewHolder extends RecyclerView.ViewHolder {
         TextView tvName, tvType;
-        ViewHolder(@NonNull View v) {
-            super(v);
-            tvName = v.findViewById(R.id.tvName);
-            tvType = v.findViewById(R.id.tvType);
-        }
+        ViewHolder(@NonNull View v) { super(v); tvName = v.findViewById(R.id.tvName); tvType = v.findViewById(R.id.tvType); }
     }
 }

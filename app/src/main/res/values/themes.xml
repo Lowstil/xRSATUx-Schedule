@@ -10,4 +10,17 @@
     <style name="Theme.UniSchedule.Splash" parent="Theme.UniSchedule">
         <item name="android:windowBackground">@color/primary</item>
     </style>
+    <!-- ✅ Добавьте этот стиль -->
+    <style name="Widget.UniSchedule.CardView" parent="Widget.Material3.CardView.Elevated">
+        <item name="cardBackgroundColor">?attr/colorSurface</item>
+        <item name="cardCornerRadius">12dp</item>
+        <item name="cardElevation">4dp</item>
+    </style>
+
+    <!-- ✅ И этот стиль -->
+    <style name="Widget.UniSchedule.Button.Outlined" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="strokeColor">?attr/colorPrimary</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="cornerRadius">8dp</item>
+    </style>
 </resources>

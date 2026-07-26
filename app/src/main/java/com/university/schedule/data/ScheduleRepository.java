@@ -24,7 +24,7 @@ import java.io.FileInputStream;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
-
+import java.time.ZoneId;
 /**
  * Единая точка доступа к данным. Координирует NetworkClient -> ExcelParser ->
  * ScheduleDao -> ScheduleFilter. Все методы, кроме геттеров настроек,
@@ -160,7 +160,7 @@ public class ScheduleRepository {
     }
 
     private DaySchedule todayFor(String name, boolean group) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(ZoneId.of("Europe/Moscow"));
         int week = weekCalculator.getWeekNumber(today);
         int dow = DateUtils.toScheduleDayOfWeek(today);
         if (week < 0) {
