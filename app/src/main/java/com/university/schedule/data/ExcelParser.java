@@ -23,55 +23,40 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Парсер .xlsx расписания, написанный под конкретный формат файла университета.
+ * Парсер .xlsx расписания.
  *
- * Структура листа (группы и преподаватели одинаковы):
- *   - где-то в первых строках идёт строка-шапка, у которой в колонке 1 стоит "Группа";
- *     в этой строке начиная с колонки 3 идут имена групп (лист групп) или ФИО
- *     преподавателей (лист преподавателей);
- *   - ниже — строки данных: col0 = тип недели ("Нечётная неделя"/"Чётная неделя"),
- *     col1 = день недели, col2 = "N пара", col3+ = ячейки с занятиями.
- *
- * Группа/преподаватель для строки берутся ИЗ ЗАГОЛОВКА колонки (source + имя),
- * а из текста ячейки извлекаются только предмет, тип, преподаватель, аудитория
- * и диапазон недель. Поэтому выбор группы показывает ровно её строки, даже если
- * в ячейке перечислены несколько групп совместной пары.
- *
- * Ячейка может содержать несколько занятий через перенос строки — парсим построчно.
+ * ГЛАВНОЕ: в файле ячейки "Неделя" (кол.0) и "День" (кол.1) ОБЪЕДИНЕНЫ
+ * на много строк (merged cells). Apache POI отдаёт значение объединённой
+ * ячейки только в её верхней строке, в остальных возвращает пустоту.
+ * Поэтому здесь используется carry-over: запоминаем последнюю непустую
+ * неделю и день и применяем их ко всем строкам ниже, пока не встретим новые.
+ * Без этого в базу попадала бы одна строка на блок ("только 1 пара").
  */
 public class ExcelParser {
 
     private static final String TAG = "ExcelParser";
 
-    /** Диапазон/список недель в скобках: (Недели 1-16), (Неделя 15), (Недели 1, 18). */
     private static final Pattern WEEK_PATTERN =
             Pattern.compile("\\(Недели?\\s*([^)]+)\\)", Pattern.CASE_INSENSITIVE);
 
-    /** Тип занятия как отдельный токен. Ищем все вхождения, берём последнее. */
     private static final Pattern TYPE_PATTERN =
             Pattern.compile("(?<![\\p{L}0-9])(оЛ|оП|ЛР|Экзамен|Л|П)(?![\\p{L}0-9])");
 
-    /** Токен-группа в начале текста (ИВБ-24, ИВБк-24-1, ИВБ(КР)-25, CТБ-25 ...). */
     private static final Pattern GROUP_TOKEN =
             Pattern.compile("^[A-Za-zА-ЯЁ][A-Za-zА-ЯЁ0-9()]*-\\d+[A-Za-zА-ЯЁ0-9().-]*$");
 
-    /** Аудитория: Г-519, 3-201, 1-101г, 1-100б, Г-200-1, Г-321а и т.п. */
     private static final Pattern ROOM_TOKEN =
             Pattern.compile("^[А-ЯЁA-Za-z]?\\d+-\\d+([а-яА-ЯёЁ])?$|^[А-ЯЁA-Za-z]+-\\d+(-\\d+)*([а-яА-ЯёЁ])?$");
 
-    /** Инициалы: "П." или "П.В.". */
     private static final Pattern INITIALS =
             Pattern.compile("^[А-ЯЁA-Z]\\.([А-ЯЁA-Z]\\.)?$");
 
-    /** Слово имени/фамилии: заглавная + строчные (>=2 букв). */
     private static final Pattern NAME_WORD =
             Pattern.compile("^[А-ЯЁA-Z][а-яёa-z]{1,}$");
 
-    /** Многословные маркеры аудиторий. */
     private static final Set<String> ROOM_TWO_WORDS = new HashSet<>(
             Arrays.asList("Большой спортзал", "Точка кипения"));
 
-    /** Однословные маркеры аудиторий (нижний регистр для сравнения). */
     private static final Set<String> ROOM_ONE_WORD = new HashSet<>(
             Arrays.asList("онлайн", "предприятия"));
 
@@ -79,12 +64,10 @@ public class ExcelParser {
             "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"
     };
 
-    /** Парсит лист групп (source = "group"). */
     public List<ScheduleItem> parseGroups(InputStream in) throws Exception {
         return parseSheet(in, Constants.SHEET_INDEX_GROUPS, ScheduleDao.SOURCE_GROUP);
     }
 
-    /** Парсит лист преподавателей (source = "teacher"). */
     public List<ScheduleItem> parseTeachers(InputStream in) throws Exception {
         return parseSheet(in, Constants.SHEET_INDEX_TEACHERS, ScheduleDao.SOURCE_TEACHER);
     }
@@ -109,17 +92,32 @@ public class ExcelParser {
                 header[c] = trim(getStr(headerRow.getCell(c)));
             }
             Log.d(TAG, "Лист \"" + sheet.getSheetName() + "\": шапка в строке " + headerRowIdx
-                    + ", данных строк ~ " + (sheet.getLastRowNum() - headerRowIdx));
+                    + ", всего строк " + (sheet.getLastRowNum() + 1));
+
+            // carry-over для объединённых ячеек "неделя" и "день"
+            String currentWeekType = null;
+            int currentDay = -1;
 
             for (int r = headerRowIdx + 1; r <= sheet.getLastRowNum(); r++) {
                 Row row = sheet.getRow(r);
                 if (row == null) continue;
-                String weekType = parseWeekType(trim(getStr(row.getCell(0))));
-                if (weekType == null) continue;
-                int day = parseDayOfWeek(trim(getStr(row.getCell(1))));
-                if (day < 0) continue;
-                int lesson = parseLessonNumber(trim(getStr(row.getCell(2))));
-                if (lesson < 0) continue;
+
+                String wtRaw = trim(getStr(row.getCell(0)));
+                if (!wtRaw.isEmpty()) {
+                    String parsed = parseWeekType(wtRaw);
+                    if (parsed != null) currentWeekType = parsed;
+                }
+                String dayRaw = trim(getStr(row.getCell(1)));
+                if (!dayRaw.isEmpty()) {
+                    int d = parseDayOfWeek(dayRaw);
+                    if (d >= 0) currentDay = d;
+                }
+
+                String lessonRaw = trim(getStr(row.getCell(2)));
+                if (lessonRaw.isEmpty()) continue;          // пустая строка-разделитель
+                int lesson = parseLessonNumber(lessonRaw);
+                if (lesson < 0) continue;                   // в колонке пары нет номера
+                if (currentWeekType == null || currentDay < 0) continue; // блок ещё не начался
 
                 int last = row.getLastCellNum();
                 for (int c = 3; c < last && c < headerLen; c++) {
@@ -128,7 +126,7 @@ public class ExcelParser {
                     String cell = getStr(row.getCell(c));
                     if (cell == null) continue;
                     for (String line : cell.split("\\r?\\n")) {
-                        ScheduleItem item = parseLine(line, weekType, day, lesson, colName, source);
+                        ScheduleItem item = parseLine(line, currentWeekType, currentDay, lesson, colName, source);
                         if (item != null) result.add(item);
                     }
                 }
@@ -138,7 +136,6 @@ public class ExcelParser {
         return result;
     }
 
-    /** Ищем строку-шапку по маркеру "Группа" в колонке 1. */
     private int findHeaderRow(Sheet sheet) {
         int limit = Math.min(6, sheet.getLastRowNum() + 1);
         for (int r = 0; r < limit; r++) {
@@ -150,22 +147,12 @@ public class ExcelParser {
         return -1;
     }
 
-    /**
-     * Разбор одной строки ячейки. Алгоритм:
-     *  1) вырезаем (Недели ...);
-     *  2) ищем последнее вхождение токена-типа;
-     *     - если тип найден: subject = всё до типа; хвост после типа = преподаватель+аудитория;
-     *     - если тип не найден: хвост = вся строка, из него эвристикой откусываем
-     *       аудиторию и преподавателя, остаток = subject;
-     *  3) чистим ведущие токены-группы и маркер "ИР" из subject.
-     */
     private ScheduleItem parseLine(String raw, String weekType, int day, int lesson,
                                    String colName, String source) {
         if (raw == null) return null;
         String line = raw.trim();
         if (line.isEmpty()) return null;
 
-        // 1) недели
         String weekSpec = "";
         Matcher wm = WEEK_PATTERN.matcher(line);
         if (wm.find()) {
@@ -173,7 +160,6 @@ public class ExcelParser {
             line = (line.substring(0, wm.start()) + " " + line.substring(wm.end())).replaceAll("\\s+", " ").trim();
         }
 
-        // 2) тип занятия (последнее вхождение)
         Matcher tm = TYPE_PATTERN.matcher(line);
         int typeStart = -1, typeEnd = -1;
         String type = "";
@@ -242,7 +228,6 @@ public class ExcelParser {
         return sb.toString();
     }
 
-    /** Откусывает аудиторию с конца списка (1 или 2 токена). */
     private String peelRoom(List<String> tt) {
         if (tt.isEmpty()) return "";
         if (tt.size() >= 2) {
@@ -261,7 +246,6 @@ public class ExcelParser {
         return "";
     }
 
-    /** Откусывает ФИО с конца списка (инициалы / слова имени). */
     private String peelTeacherSuffix(List<String> tt) {
         int i = tt.size();
         while (i > 0) {
@@ -277,7 +261,6 @@ public class ExcelParser {
         return teacher;
     }
 
-    /** Убирает ведущие токены-группы и маркер "ИР". */
     private String cleanSubject(String raw) {
         if (raw == null) return "";
         List<String> st = tokens(raw);

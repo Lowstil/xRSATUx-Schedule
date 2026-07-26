@@ -3,10 +3,12 @@ package com.university.schedule.util;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 
-/** Утилиты дат. java.time работает на API 24+ благодаря desugaring (включён в build.gradle). */
+/** Утилиты дат. java.time работает на API 24+ благодаря desugaring. */
 public final class DateUtils {
     private DateUtils() { }
 
@@ -44,12 +46,21 @@ public final class DateUtils {
         return mondayOfWeek.plusDays(dayOfWeek - 1L);
     }
 
-    /** Понедельник недели, в которую попадает дата. */
     public static LocalDate mondayOfWeek(LocalDate date) {
         return date.minusDays(date.getDayOfWeek().getValue() - 1L);
     }
 
     public static String formatDisplayDate(LocalDate date) {
         return date == null ? "" : date.format(DISPLAY_DATE);
+    }
+
+    /** "Сегодня" по московскому времени (сверка с Москвой). */
+    public static LocalDate todayMoscow() {
+        return LocalDate.now(ZoneId.of(Constants.MOSCOW_ZONE));
+    }
+
+    /** Текущее время по московскому времени. */
+    public static LocalTime nowTimeMoscow() {
+        return LocalTime.now(ZoneId.of(Constants.MOSCOW_ZONE));
     }
 }

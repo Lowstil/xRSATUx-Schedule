@@ -2,6 +2,8 @@ package com.university.schedule.ui.activity;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -24,6 +26,7 @@ import com.university.schedule.model.WeekSchedule;
 import com.university.schedule.ui.adapter.DayScheduleAdapter;
 import com.university.schedule.util.Constants;
 import com.university.schedule.util.DateUtils;
+import com.university.schedule.util.ScheduleClock;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -44,10 +47,19 @@ public class MainActivity extends AppCompatActivity {
     private ScheduleRepository repo;
     private WeekCalculator calc;
     private WeekSchedule currentWeek;
+    private LocalDate selectedDayDate;
 
     private String selType, selName;
     private int weekNum, dayIndex;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+
+    private final Handler clockHandler = new Handler(Looper.getMainLooper());
+    private final Runnable clockTick = new Runnable() {
+        @Override public void run() {
+            updateClock();
+            clockHandler.postDelayed(this, 30000);
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -60,7 +72,7 @@ public class MainActivity extends AppCompatActivity {
 
         weekNum = calc.getCurrentWeekNumber();
         if (weekNum < 1) weekNum = 1;
-        int dow = DateUtils.toScheduleDayOfWeek(LocalDate.now());
+        int dow = DateUtils.toScheduleDayOfWeek(DateUtils.todayMoscow());
         dayIndex = (dow >= 1 && dow <= 6) ? dow - 1 : 0;
 
         toolbar = findViewById(R.id.toolbar);
@@ -76,7 +88,8 @@ public class MainActivity extends AppCompatActivity {
         setSupportActionBar(toolbar);
         if (getSupportActionBar() != null) {
             getSupportActionBar().setTitle(selName);
-            getSupportActionBar().setSubtitle(GroupOrTeacher.TYPE_GROUP.equals(selType) ? "Группа" : "Преподаватель");
+            getSupportActionBar().setSubtitle(
+                    GroupOrTeacher.TYPE_GROUP.equals(selType) ? "Группа" : "Преподаватель");
         }
 
         adapter = new DayScheduleAdapter(new ArrayList<>());
@@ -87,8 +100,8 @@ public class MainActivity extends AppCompatActivity {
         tabLayout.selectTab(tabLayout.getTabAt(dayIndex));
         tabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override public void onTabSelected(TabLayout.Tab t) { dayIndex = t.getPosition(); displayDay(); }
-            @Override public void onTabUnselected(TabLayout.Tab t) {}
-            @Override public void onTabReselected(TabLayout.Tab t) {}
+            @Override public void onTabUnselected(TabLayout.Tab t) { }
+            @Override public void onTabReselected(TabLayout.Tab t) { }
         });
 
         swipeRefresh.setOnRefreshListener(this::refresh);
@@ -96,6 +109,19 @@ public class MainActivity extends AppCompatActivity {
         btnNext.setOnClickListener(v -> { if (weekNum < 18) { weekNum++; loadWeek(); } });
 
         loadWeek();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        clockHandler.removeCallbacks(clockTick);
+        clockHandler.post(clockTick);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        clockHandler.removeCallbacks(clockTick);
     }
 
     private void loadWeek() {
@@ -121,11 +147,14 @@ public class MainActivity extends AppCompatActivity {
     private void displayDay() {
         if (currentWeek == null || currentWeek.getDays().isEmpty()) {
             adapter.updateData(new ArrayList<>());
+            selectedDayDate = null;
             tvEmpty.setVisibility(View.VISIBLE);
             tvEmpty.setText("Нет данных");
             return;
         }
         DaySchedule day = currentWeek.getDays().get(dayIndex);
+        selectedDayDate = day.getDate();
+
         if (day.isDayOff()) {
             adapter.updateData(new ArrayList<>());
             tvEmpty.setVisibility(View.VISIBLE);
@@ -138,6 +167,13 @@ public class MainActivity extends AppCompatActivity {
             tvEmpty.setVisibility(View.GONE);
             adapter.updateData(day.getLessons());
         }
+        updateClock();
+    }
+
+    /** Пересчитать подсветку текущей/следующей пары для выбранного таба. */
+    private void updateClock() {
+        ScheduleClock.State st = ScheduleClock.compute();
+        adapter.applyClock(selectedDayDate, st.current, st.next);
     }
 
     private void refresh() {
@@ -148,7 +184,7 @@ public class MainActivity extends AppCompatActivity {
             @Override public void onError(String m) {
                 runOnUiThread(() -> swipeRefresh.setRefreshing(false));
             }
-            @Override public void onProgress(String m) {}
+            @Override public void onProgress(String m) { }
         }));
     }
 
@@ -175,6 +211,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        clockHandler.removeCallbacks(clockTick);
         executor.shutdown();
     }
 }

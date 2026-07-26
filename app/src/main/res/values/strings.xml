@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">UniSchedule</string>
+    <string name="app_name">Расписание РГАТУ</string>
     <string name="splash_subtitle">Расписание занятий</string>
     <string name="selection_title">Выберите группу или преподавателя</string>
     <string name="toggle_groups">Группы</string>
