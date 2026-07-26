@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="primary">#5C6BC0</color>
+    <color name="primary_dark">#12141F</color>
+    <color name="primary_light">#8E99F3</color>
+    <color name="accent">#FF8A65</color>
+
+    <color name="background">#12141F</color>
+    <color name="surface">#1C1F2E</color>
+    <color name="surface_alt">#242840</color>
+    <color name="outline">#2E3350</color>
+
+    <color name="error">#EF5350</color>
+    <color name="online">#66BB6A</color>
+
+    <color name="text_primary">#F0F1F8</color>
+    <color name="text_secondary">#AEB2C8</color>
+    <color name="text_tertiary">#7C8098</color>
+    <color name="white_70">#B3FFFFFF</color>
+    <color name="white_90">#E6FFFFFF</color>
+
+    <color name="badge_lecture">#5C6BC0</color>
+    <color name="badge_practice">#66BB6A</color>
+    <color name="badge_lab">#FFA726</color>
+    <color name="badge_exam">#EF5350</color>
+    <color name="badge_default">#8A8E9E</color>
+
+    <color name="state_current_bg">#3A2A1D</color>
+    <color name="state_current_accent">#FFA726</color>
+    <color name="state_current_text">#FFCC80</color>
+    <color name="state_next_bg">#1B332E</color>
+    <color name="state_next_accent">#4DB6AC</color>
+    <color name="state_next_text">#80CBC4</color>
+
+    <color name="progress_track">#2E3350</color>
+</resources>

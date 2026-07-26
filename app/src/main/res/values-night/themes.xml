@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Тёмная тема наследует ту же структуру; конкретные цвета берутся
+         из values-night/colors.xml, поэтому саму тему переопределять не нужно —
+         этот файл существует, чтобы статус-бар и splash оставались
+         корректными в тёмном режиме (некоторые OEM-прошивки требуют
+         явного night-варианта темы для системных баров). -->
+    <style name="Theme.UniSchedule" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/primary</item>
+        <item name="colorPrimaryDark">@color/primary_dark</item>
+        <item name="colorAccent">@color/accent</item>
+        <item name="colorSurface">@color/surface</item>
+        <item name="colorOnSurface">@color/text_primary</item>
+        <item name="android:statusBarColor">@color/primary_dark</item>
+        <item name="android:windowBackground">@color/background</item>
+        <item name="android:navigationBarColor">@color/primary_dark</item>
+        <item name="materialCardViewStyle">@style/Widget.UniSchedule.CardView</item>
+        <item name="materialButtonOutlinedStyle">@style/Widget.UniSchedule.Button.Outlined</item>
+    </style>
+
+    <style name="Theme.UniSchedule.Splash" parent="Theme.UniSchedule">
+        <item name="android:windowBackground">@drawable/bg_splash_gradient</item>
+        <item name="android:statusBarColor">@color/primary_dark</item>
+    </style>
+</resources>
