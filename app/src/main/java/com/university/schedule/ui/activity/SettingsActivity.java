@@ -6,15 +6,17 @@ import android.os.Bundle;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.button.MaterialButtonToggleGroup;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.university.schedule.R;
 import com.university.schedule.data.ScheduleRepository;
 import com.university.schedule.logic.SemesterManager;
 import com.university.schedule.util.DateUtils;
+import com.university.schedule.util.ThemeManager;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -27,6 +29,8 @@ public class SettingsActivity extends AppCompatActivity {
     private final ExecutorService ex = Executors.newSingleThreadExecutor();
     private TextView tvSel, tvSem, tvUpd;
     private MaterialButton btnRefresh;
+    private MaterialButtonToggleGroup toggleTheme;
+    private boolean suppressThemeCallback;
 
     @Override
     protected void onCreate(Bundle s) {
@@ -35,13 +39,14 @@ public class SettingsActivity extends AppCompatActivity {
         repo = ScheduleRepository.getInstance(this);
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
-        if (getSupportActionBar() != null) { getSupportActionBar().setTitle("Настройки"); getSupportActionBar().setDisplayHomeAsUpEnabled(true); }
+        if (getSupportActionBar() != null) { getSupportActionBar().setTitle(R.string.action_settings); getSupportActionBar().setDisplayHomeAsUpEnabled(true); }
         toolbar.setNavigationOnClickListener(v -> finish());
 
         tvSel = findViewById(R.id.tvCurrentSelection);
         tvSem = findViewById(R.id.tvSemesterInfo);
         tvUpd = findViewById(R.id.tvLastUpdated);
         btnRefresh = findViewById(R.id.btnRefreshSchedule);
+        toggleTheme = findViewById(R.id.toggleTheme);
 
         findViewById(R.id.btnChangeSelection).setOnClickListener(v -> {
             Intent i = new Intent(this, SelectionActivity.class);
@@ -50,7 +55,11 @@ public class SettingsActivity extends AppCompatActivity {
         });
         findViewById(R.id.btnChangeSemester).setOnClickListener(v -> pickDate());
         btnRefresh.setOnClickListener(v -> doRefresh());
-        findViewById(R.id.btnClearData).setOnClickListener(v -> new AlertDialog.Builder(this)
+
+        // MaterialAlertDialogBuilder (не обычный AlertDialog.Builder) подхватывает
+        // materialAlertDialogTheme из темы приложения — иначе в тёмной теме
+        // диалог подтверждения оставался светлым поверх тёмного экрана.
+        findViewById(R.id.btnClearData).setOnClickListener(v -> new MaterialAlertDialogBuilder(this)
                 .setTitle("Очистить данные").setMessage("Удалить расписание и настройки?")
                 .setPositiveButton("Удалить", (d, w) -> ex.execute(() -> {
                     repo.clearAllData();
@@ -59,7 +68,31 @@ public class SettingsActivity extends AppCompatActivity {
                         i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
                         startActivity(i); finish(); });
                 })).setNegativeButton("Отмена", null).show());
+
+        setupThemeToggle();
         updateInfo();
+    }
+
+    /** Задача 5: переключатель темы (Системная/Светлая/Тёмная), по умолчанию — системная. */
+    private void setupThemeToggle() {
+        int saved = ThemeManager.getSavedMode(this);
+        int checkedId;
+        if (saved == ThemeManager.MODE_LIGHT) checkedId = R.id.btnThemeLight;
+        else if (saved == ThemeManager.MODE_DARK) checkedId = R.id.btnThemeDark;
+        else checkedId = R.id.btnThemeSystem;
+
+        suppressThemeCallback = true;
+        toggleTheme.check(checkedId);
+        suppressThemeCallback = false;
+
+        toggleTheme.addOnButtonCheckedListener((group, checkedButtonId, isChecked) -> {
+            if (!isChecked || suppressThemeCallback) return;
+            int mode;
+            if (checkedButtonId == R.id.btnThemeLight) mode = ThemeManager.MODE_LIGHT;
+            else if (checkedButtonId == R.id.btnThemeDark) mode = ThemeManager.MODE_DARK;
+            else mode = ThemeManager.MODE_SYSTEM;
+            ThemeManager.setMode(this, mode);
+        });
     }
 
     private void updateInfo() {
@@ -73,7 +106,9 @@ public class SettingsActivity extends AppCompatActivity {
     private void pickDate() {
         LocalDate cur = repo.getSemesterStart();
         if (cur == null) cur = SemesterManager.getDefaultSemesterStart();
-        new DatePickerDialog(this, (v, y, m, d) -> {
+        // Явный ThemeOverlay для DatePickerDialog — иначе на части устройств
+        // диалог календаря игнорирует тёмную тему приложения и остаётся светлым.
+        new DatePickerDialog(this, R.style.ThemeOverlay_UniSchedule_DatePicker, (v, y, m, d) -> {
             LocalDate sel = LocalDate.of(y, m + 1, d);
             LocalDate mon = DateUtils.mondayOfWeek(sel);
             if (mon.isAfter(sel)) mon = mon.minusWeeks(1);
@@ -83,7 +118,7 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void doRefresh() {
-        btnRefresh.setEnabled(false); btnRefresh.setText("Обновление...");
+        btnRefresh.setEnabled(false); btnRefresh.setText(R.string.settings_refresh);
         ex.execute(() -> repo.loadScheduleFromNetwork(new ScheduleRepository.LoadCallback() {
             @Override public void onSuccess() { runOnUiThread(() -> { btnRefresh.setEnabled(true); btnRefresh.setText(R.string.settings_refresh); updateInfo(); Toast.makeText(SettingsActivity.this, "Расписание обновлено", Toast.LENGTH_SHORT).show(); }); }
             @Override public void onError(String m) { runOnUiThread(() -> { btnRefresh.setEnabled(true); btnRefresh.setText(R.string.settings_refresh); Toast.makeText(SettingsActivity.this, "Ошибка: " + m, Toast.LENGTH_LONG).show(); }); }

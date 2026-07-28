@@ -51,4 +51,17 @@ public class PrefsManager {
     }
 
     public void clearAll() { prefs.edit().clear().apply(); }
+
+    /**
+     * Режим темы: одно из AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM (по умолчанию),
+     * MODE_NIGHT_NO (светлая), MODE_NIGHT_YES (тёмная). Хранится как int-код
+     * самого AppCompatDelegate, чтобы не городить свой enum.
+     */
+    public void saveThemeMode(int mode) {
+        prefs.edit().putInt(Constants.PREF_THEME_MODE, mode).apply();
+    }
+
+    public int getThemeMode(int defaultMode) {
+        return prefs.getInt(Constants.PREF_THEME_MODE, defaultMode);
+    }
 }

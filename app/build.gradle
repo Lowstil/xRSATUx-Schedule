@@ -42,8 +42,14 @@ dependencies {
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
     implementation 'androidx.viewpager2:viewpager2:1.0.0'
 
+    // ВАЖНО: обе зависимости POI должны быть одной версии (5.2.5).
+    // poi-ooxml 5.5.1 тянет org.apache.poi.poifs.nio.CleanerUtil, использующий
+    // MethodHandle.invoke/invokeExact (инструкция invoke-polymorphic) — это
+    // аппаратная фича ART, которую D8 умеет дексить только начиная с API 26,
+    // и никакое core library desugaring этого не обходит. На 5.2.5 этот путь
+    // кода отсутствует, поэтому minSdk 24 снова собирается без ошибок D8.
     implementation('org.apache.poi:poi:5.2.5') { exclude group: 'org.apache.commons', module: 'commons-compress' }
-    implementation('org.apache.poi:poi-ooxml:5.5.1') { exclude group: 'org.apache.commons', module: 'commons-compress' }
+    implementation('org.apache.poi:poi-ooxml:5.2.5') { exclude group: 'org.apache.commons', module: 'commons-compress' }
     implementation 'org.apache.commons:commons-compress:1.26.1'
 
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'

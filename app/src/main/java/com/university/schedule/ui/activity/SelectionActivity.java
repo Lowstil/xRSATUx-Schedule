@@ -19,6 +19,7 @@ import com.university.schedule.ui.adapter.SelectionAdapter;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -32,6 +33,7 @@ public class SelectionActivity extends AppCompatActivity implements SelectionAda
     private List<GroupOrTeacher> all = new ArrayList<>();
     private List<GroupOrTeacher> filtered = new ArrayList<>();
     private String type = GroupOrTeacher.TYPE_GROUP;
+    private String currentName, currentType;
     private final ExecutorService ex = Executors.newSingleThreadExecutor();
     private ScheduleRepository repo;
 
@@ -40,6 +42,12 @@ public class SelectionActivity extends AppCompatActivity implements SelectionAda
         super.onCreate(s);
         setContentView(R.layout.activity_selection);
         repo = ScheduleRepository.getInstance(this);
+        currentName = repo.getSelectionName();
+        currentType = repo.getSelectionType();
+        // Если уже был выбор — открываем экран сразу на той же вкладке
+        // (группы/преподаватели), чтобы закреплённый пункт был на виду.
+        if (GroupOrTeacher.TYPE_TEACHER.equals(currentType)) type = GroupOrTeacher.TYPE_TEACHER;
+
         toggleGroup = findViewById(R.id.toggleGroup);
         searchView = findViewById(R.id.searchView);
         recyclerView = findViewById(R.id.recyclerView);
@@ -48,9 +56,11 @@ public class SelectionActivity extends AppCompatActivity implements SelectionAda
         tvStatus = findViewById(R.id.tvStatus);
 
         adapter = new SelectionAdapter(filtered, this);
+        adapter.setCurrentSelection(currentName, currentType);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         recyclerView.setAdapter(adapter);
 
+        toggleGroup.check(GroupOrTeacher.TYPE_TEACHER.equals(type) ? R.id.btnTeachers : R.id.btnGroups);
         toggleGroup.addOnButtonCheckedListener((g, id, c) -> {
             if (!c) return;
             type = (id == R.id.btnTeachers) ? GroupOrTeacher.TYPE_TEACHER : GroupOrTeacher.TYPE_GROUP;
@@ -87,8 +97,24 @@ public class SelectionActivity extends AppCompatActivity implements SelectionAda
 
     private void filter(String q) {
         filtered.clear();
-        if (q == null || q.trim().isEmpty()) filtered.addAll(all);
-        else { String l = q.toLowerCase(); for (GroupOrTeacher it : all) if (it.getName().toLowerCase().contains(l)) filtered.add(it); }
+        List<GroupOrTeacher> matches = new ArrayList<>();
+        if (q == null || q.trim().isEmpty()) matches.addAll(all);
+        else { String l = q.toLowerCase(); for (GroupOrTeacher it : all) if (it.getName().toLowerCase().contains(l)) matches.add(it); }
+
+        // Закрепляем текущий выбор первым пунктом списка — если случайно
+        // нажали не туда, можно мгновенно вернуться назад без поиска.
+        GroupOrTeacher pinned = null;
+        for (GroupOrTeacher it : matches) {
+            if (currentName != null && Objects.equals(it.getType(), currentType) && currentName.equalsIgnoreCase(it.getName())) {
+                pinned = it; break;
+            }
+        }
+        if (pinned != null) {
+            filtered.add(pinned);
+            for (GroupOrTeacher it : matches) if (it != pinned) filtered.add(it);
+        } else {
+            filtered.addAll(matches);
+        }
         adapter.updateData(filtered);
         tvEmpty.setVisibility(filtered.isEmpty() ? View.VISIBLE : View.GONE);
     }

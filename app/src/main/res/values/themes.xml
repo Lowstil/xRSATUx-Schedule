@@ -1,26 +1,86 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.UniSchedule" parent="Theme.MaterialComponents.Light.NoActionBar">
+    <!--
+        ВАЖНО: раньше здесь был parent="Theme.MaterialComponents.Light.NoActionBar" —
+        то есть тема была ЖЁСТКО светлой независимо от системной темы. Из-за этого
+        цвета (colors.xml / values-night/colors.xml) переключались, а виджеты
+        платформы (диалоги, DatePickerDialog, чекбоксы, рипплы, цвета текста по
+        умолчанию) — нет, потому что они берутся из самой темы, а не из отдельных
+        цветов. Именно поэтому тёмная тема выглядела "поломанной", а переход в
+        настройки в тёмной теме был визуально битым. Parent исправлен на DayNight,
+        поэтому эта же тема ниже используется и для light (values/), и как основа
+        для night (values-night/themes.xml переопределяет только то, что нужно).
+    -->
+    <style name="Theme.UniSchedule" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="colorPrimary">@color/primary</item>
         <item name="colorPrimaryDark">@color/primary_dark</item>
         <item name="colorAccent">@color/accent</item>
+        <item name="colorSurface">@color/surface</item>
+        <item name="colorOnSurface">@color/text_primary</item>
+        <item name="colorControlNormal">@color/text_secondary</item>
+        <item name="colorControlActivated">@color/accent</item>
         <item name="android:statusBarColor">@color/primary_dark</item>
         <item name="android:windowBackground">@color/background</item>
-    </style>
-    <style name="Theme.UniSchedule.Splash" parent="Theme.UniSchedule">
-        <item name="android:windowBackground">@color/primary</item>
-    </style>
-    <!-- ✅ Добавьте этот стиль -->
-    <style name="Widget.UniSchedule.CardView" parent="Widget.Material3.CardView.Elevated">
-        <item name="cardBackgroundColor">?attr/colorSurface</item>
-        <item name="cardCornerRadius">12dp</item>
-        <item name="cardElevation">4dp</item>
+        <item name="android:navigationBarColor">@color/primary_dark</item>
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
+        <item name="materialCardViewStyle">@style/Widget.UniSchedule.CardView</item>
+        <item name="materialButtonOutlinedStyle">@style/Widget.UniSchedule.Button.Outlined</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.UniSchedule.Dialog</item>
     </style>
 
-    <!-- ✅ И этот стиль -->
-    <style name="Widget.UniSchedule.Button.Outlined" parent="Widget.Material3.Button.OutlinedButton">
-        <item name="strokeColor">?attr/colorPrimary</item>
-        <item name="android:textColor">?attr/colorPrimary</item>
+    <style name="Theme.UniSchedule.Splash" parent="Theme.UniSchedule">
+        <item name="android:windowBackground">@drawable/bg_splash_gradient</item>
+        <item name="android:statusBarColor">@color/primary_dark</item>
+    </style>
+
+    <style name="Widget.UniSchedule.CardView" parent="Widget.MaterialComponents.CardView">
+        <item name="cardBackgroundColor">@color/surface</item>
+        <item name="cardCornerRadius">12dp</item>
+        <item name="cardElevation">2dp</item>
+        <item name="strokeColor">@color/outline</item>
+        <item name="strokeWidth">1dp</item>
+    </style>
+
+    <style name="Widget.UniSchedule.Button.Outlined" parent="Widget.MaterialComponents.Button.OutlinedButton">
+        <item name="strokeColor">@color/primary</item>
+        <item name="android:textColor">@color/primary</item>
         <item name="cornerRadius">8dp</item>
+    </style>
+
+    <!-- Диалоги (AlertDialog/MaterialAlertDialogBuilder) — иначе на некоторых
+         прошивках фон/текст диалога остаётся светлым поверх тёмного приложения. -->
+    <style name="ThemeOverlay.UniSchedule.Dialog" parent="ThemeOverlay.MaterialComponents.MaterialAlertDialog">
+        <item name="colorSurface">@color/surface</item>
+        <item name="colorOnSurface">@color/text_primary</item>
+        <item name="colorPrimary">@color/primary</item>
+        <item name="android:windowBackground">@color/surface</item>
+    </style>
+
+    <!--
+        DatePickerDialog — платформенный (android.app.DatePickerDialog), а не
+        MaterialComponents-виджет. Ему нужна тема на основе android:Theme.*,
+        а не ThemeOverlay.MaterialComponents.* — раньше это приводило к падению
+        при открытии диалога выбора даты начала семестра. android:Theme.DeviceDefault.Dialog.Alert
+        уже сам следует системной тёмной/светлой теме, поэтому кастомить его
+        дальше не нужно — этого достаточно, чтобы диалог не был "инородным" на фоне
+        приложения.
+    -->
+    <style name="ThemeOverlay.UniSchedule.DatePicker" parent="android:Theme.DeviceDefault.Dialog.Alert" />
+
+    <!-- Заголовок выбора (название группы/преподавателя) в шапке — крупнее и
+         жирнее, чем стандартный ActionBar title, читаем на обеих темах. -->
+    <style name="TextAppearance.UniSchedule.ToolbarTitle" parent="TextAppearance.MaterialComponents.Headline6">
+        <item name="android:textColor">#FFFFFF</item>
+        <item name="android:textSize">19sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <!-- Подзаголовок "Группа"/"Преподаватель" — раньше использовал системный
+         setSubtitle() с крошечным кеглем в тёмной теме; теперь это отдельный
+         TextView с явным размером. -->
+    <style name="TextAppearance.UniSchedule.ToolbarSubtitle" parent="TextAppearance.MaterialComponents.Subtitle2">
+        <item name="android:textColor">@color/white_90</item>
+        <item name="android:textSize">14sp</item>
     </style>
 </resources>

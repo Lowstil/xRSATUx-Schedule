@@ -33,4 +33,16 @@
     <color name="state_next_text">#80CBC4</color>
 
     <color name="progress_track">#2E3350</color>
+
+    <!-- Бейджи-пометки дней: сегодня / завтра / через N дней -->
+    <color name="badge_today_bg">#5C6BC0</color>
+    <color name="badge_today_text">#FFFFFF</color>
+    <color name="badge_tomorrow_bg">#4A3823</color>
+    <color name="badge_tomorrow_text">#FFCC80</color>
+    <color name="badge_future_bg">#2A2E42</color>
+    <color name="badge_future_text">#AEB2C8</color>
+
+    <!-- Плашка даты в шапке -->
+    <color name="date_pill_bg">#33000000</color>
+    <color name="date_pill_text">#FFFFFF</color>
 </resources>

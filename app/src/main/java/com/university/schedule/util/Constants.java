@@ -16,6 +16,7 @@ public final class Constants {
     public static final String PREF_SELECTION_NAME = "selection_name";
     public static final String PREF_SEMESTER_START = "semester_start";
     public static final String PREF_LAST_UPDATED = "last_updated";
+    public static final String PREF_THEME_MODE = "theme_mode";
 
     public static final String LESSON_TYPE_LECTURE = "Л";
     public static final String LESSON_TYPE_PRACTICE = "П";

@@ -16,6 +16,10 @@
     <string name="settings_semester">Семестр</string>
     <string name="settings_change_semester">Изменить дату начала</string>
     <string name="settings_data">Данные расписания</string>
+    <string name="settings_theme">Тема оформления</string>
+    <string name="settings_theme_system">Системная</string>
+    <string name="settings_theme_light">Светлая</string>
+    <string name="settings_theme_dark">Тёмная</string>
     <string name="settings_refresh">Обновить расписание</string>
     <string name="settings_clear">Очистить все данные</string>
     <string name="action_settings">Настройки</string>
