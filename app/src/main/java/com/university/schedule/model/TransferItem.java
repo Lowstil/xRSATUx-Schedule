@@ -108,9 +108,71 @@ public class TransferItem {
         return true;
     }
 
-    /** Совпадает ли по преподавателю — либо основной, либо заменяющий. */
+    /**
+     * Совпадает ли по преподавателю — либо основной, либо заменяющий.
+     *
+     * ВАЖНО: журнал переносов пишет ФИО ПОЛНОСТЬЮ ("Гагарина Алиса
+     * Игоревна"), а основной файл расписания (и, соответственно, выбор
+     * пользователя в приложении) использует сокращённую форму "Фамилия И.О."
+     * ("Гагарина А.И.") — это видно по регэкспу разбора преподавателя в
+     * ExcelParser (INITIALS/NAME_WORD собирают именно инициалы, а не полные
+     * имена). Точное сравнение строк между этими двумя форматами никогда не
+     * совпадало, поэтому переносы у преподавателей не показывались вообще —
+     * не только у некоторых, а у всех сразу, что и было замечено. Теперь
+     * обе стороны приводятся к единому каноничному виду "Фамилия И.О."
+     * перед сравнением — это работает независимо от того, в каком из двух
+     * форматов реально пришла строка с обеих сторон.
+     */
     public boolean matchesTeacher(String teacher) {
-        if (teacher == null) return false;
-        return teacher.equalsIgnoreCase(teacherName) || teacher.equalsIgnoreCase(substituteTeacher);
+        if (teacher == null || teacher.isEmpty()) return false;
+        String needle = toShortForm(teacher);
+        if (needle.isEmpty()) return false;
+        return needle.equalsIgnoreCase(toShortForm(teacherName))
+                || needle.equalsIgnoreCase(toShortForm(substituteTeacher));
+    }
+
+    /**
+     * Приводит ФИО к ключу вида "фамилия|ИО" для сравнения — независимо от
+     * того, пришло оно как "Фамилия И.О." (без пробела между инициалами)
+     * или как "Фамилия Имя Отчество" полностью. Раньше здесь была наивная
+     * реализация, которая делила строку по пробелам и склеивала обратно
+     * через пробел — из-за этого "Фамилия И.О." (один токен "И.О." без
+     * пробела внутри) не совпадало с результатом разбора "Фамилия Имя
+     * Отчество" (тут инициалы получались "И. О." через пробел) — сравнение
+     * никогда не срабатывало. Теперь из "хвоста" ФИО достаются только первые буквы
+     * каждого слова (слово = последовательность букв; точки/пробелы/дефисы
+     * — просто разделители), поэтому оба формата дают одинаковый ключ.
+     * Фамилия (первое слово целиком, включая дефис в двойных фамилиях)
+     * сравнивается отдельно и без изменений.
+     */
+    private static String toShortForm(String fullOrShort) {
+        if (fullOrShort == null) return "";
+        String s = fullOrShort.trim();
+        if (s.isEmpty()) return "";
+        int firstSpace = indexOfWhitespace(s);
+        String surname = (firstSpace < 0 ? s : s.substring(0, firstSpace)).toLowerCase();
+        String rest = firstSpace < 0 ? "" : s.substring(firstSpace + 1);
+
+        StringBuilder initials = new StringBuilder();
+        boolean atWordStart = true;
+        for (int i = 0; i < rest.length(); i++) {
+            char c = rest.charAt(i);
+            if (Character.isLetter(c)) {
+                if (atWordStart) {
+                    initials.append(Character.toUpperCase(c));
+                    atWordStart = false;
+                }
+            } else {
+                atWordStart = true; // точка/пробел/дефис — начало нового слова
+            }
+        }
+        return surname + "|" + initials;
+    }
+
+    private static int indexOfWhitespace(String s) {
+        for (int i = 0; i < s.length(); i++) {
+            if (Character.isWhitespace(s.charAt(i))) return i;
+        }
+        return -1;
     }
 }
