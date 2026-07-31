@@ -50,6 +50,14 @@ public class PrefsManager {
         return prefs.getString(Constants.PREF_LAST_UPDATED, null);
     }
 
+    public void saveTransfersLastUpdated(String iso) {
+        prefs.edit().putString(Constants.PREF_TRANSFERS_LAST_UPDATED, iso).apply();
+    }
+
+    public String getTransfersLastUpdated() {
+        return prefs.getString(Constants.PREF_TRANSFERS_LAST_UPDATED, null);
+    }
+
     public void clearAll() { prefs.edit().clear().apply(); }
 
     /**

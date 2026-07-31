@@ -24,6 +24,12 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
+    // Нужно явно включить начиная с AGP 8 — иначе BuildConfig.DEBUG (используется
+    // в ScheduleApplication для условного включения StrictMode) не сгенерируется.
+    buildFeatures {
+        buildConfig true
+    }
+
     packagingOptions {
         resources {
             excludes += ['META-INF/DEPENDENCIES','META-INF/LICENSE','META-INF/LICENSE.txt','META-INF/NOTICE','META-INF/NOTICE.txt','META-INF/*.kotlin_module','META-INF/INDEX.LIST']

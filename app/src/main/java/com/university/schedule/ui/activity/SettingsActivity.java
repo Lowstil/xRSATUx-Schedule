@@ -27,7 +27,7 @@ import java.util.concurrent.Executors;
 public class SettingsActivity extends AppCompatActivity {
     private ScheduleRepository repo;
     private final ExecutorService ex = Executors.newSingleThreadExecutor();
-    private TextView tvSel, tvSem, tvUpd;
+    private TextView tvSel, tvSem, tvUpd, tvTransfersUpd;
     private MaterialButton btnRefresh;
     private MaterialButtonToggleGroup toggleTheme;
     private boolean suppressThemeCallback;
@@ -45,6 +45,7 @@ public class SettingsActivity extends AppCompatActivity {
         tvSel = findViewById(R.id.tvCurrentSelection);
         tvSem = findViewById(R.id.tvSemesterInfo);
         tvUpd = findViewById(R.id.tvLastUpdated);
+        tvTransfersUpd = findViewById(R.id.tvTransfersLastUpdated);
         btnRefresh = findViewById(R.id.btnRefreshSchedule);
         toggleTheme = findViewById(R.id.toggleTheme);
 
@@ -100,7 +101,9 @@ public class SettingsActivity extends AppCompatActivity {
         tvSel.setText(("group".equals(t) ? "Группа" : "Преподаватель") + ": " + (n != null ? n : "—"));
         tvSem.setText(SemesterManager.describeSemester(repo.getSemesterInfo()));
         LocalDateTime ldt = DateUtils.parseIsoDateTime(repo.getLastUpdated());
-        tvUpd.setText(ldt != null ? "Обновлено: " + ldt.format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")) : "Ещё не обновлялось");
+        tvUpd.setText(ldt != null ? "Расписание обновлено: " + ldt.format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")) : "Расписание ещё не обновлялось");
+        LocalDateTime tldt = DateUtils.parseIsoDateTime(repo.getTransfersLastUpdated());
+        tvTransfersUpd.setText(tldt != null ? "Переносы обновлены: " + tldt.format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")) : "Переносы ещё не загружались");
     }
 
     private void pickDate() {

@@ -8,6 +8,29 @@ public final class Constants {
     public static final String CACHE_FILE_NAME = "schedule_cache.xlsx";
     public static final int SCHEDULE_TTL_HOURS = 12;
 
+    /**
+     * Переносы занятий: имя файла на сайте вуза может меняться (в нём зашит
+     * хэш вида ".../0f4/dcx2qn9n5x336rmt8w9bf012quaydf8e/ZHurnal-perenosov-....xlsx"),
+     * поэтому вместо прямой ссылки на файл указывается страница, на которой
+     * этот файл размещён — NetworkClient сначала скачивает HTML этой
+     * страницы и ищет на ней ссылку на .xlsx с "переносы" в названии
+     * (см. TRANSFERS_FILENAME_HINT), и уже её скачивает. TRANSFERS_PAGE_URL
+     * нужно один раз проверить и при необходимости поправить на реальный
+     * адрес раздела "Расписание" / "Учебный процесс" сайта вуза, где
+     * фактически размещена ссылка на файл переносов.
+     */
+    public static final String TRANSFERS_PAGE_URL =
+            "https://www.rsatu.ru/students/raspisanie-zanyatiy/";
+    /** Резервная прямая ссылка — используется, если поиск по странице не нашёл файл
+     *  (например, изменилась структура страницы). Имя файла тоже может устареть,
+     *  поэтому это именно запасной, а не основной путь. */
+    public static final String TRANSFERS_FALLBACK_URL =
+            "https://www.rsatu.ru/upload/iblock/0f4/dcx2qn9n5x336rmt8w9bf012quaydf8e/ZHurnal-perenosov-2025_2026-uch.g..xlsx";
+    /** Фрагмент имени файла (без учёта регистра), по которому ищем нужную ссылку на странице. */
+    public static final String TRANSFERS_FILENAME_HINT = "perenos";
+    public static final String TRANSFERS_CACHE_FILE_NAME = "transfers_cache.xlsx";
+    public static final String PREF_TRANSFERS_LAST_UPDATED = "transfers_last_updated";
+
     public static final int SHEET_INDEX_GROUPS = 0;
     public static final int SHEET_INDEX_TEACHERS = 1;
 

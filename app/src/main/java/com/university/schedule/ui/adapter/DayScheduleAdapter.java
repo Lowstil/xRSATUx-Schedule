@@ -3,6 +3,8 @@ package com.university.schedule.ui.adapter;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -17,7 +19,9 @@ import com.university.schedule.R;
 import com.university.schedule.model.ScheduleItem;
 import com.university.schedule.util.RoomFormatter;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.ViewHolder> {
 
@@ -33,6 +37,13 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
     private static final int PRIMARY_LIGHT = 0xFF1565C0;
     private static final int PRIMARY_DARK = 0xFF8AB4F8;
 
+    /** Цвет пометки "перенесено/замена" — янтарный, привлекает внимание, но не тревожный. */
+    private static final int TRANSFER_LIGHT = 0xFFB26A00;
+    private static final int TRANSFER_DARK = 0xFFF3A96B;
+    /** Цвет пометки отменённого (перенесённого на другое время) занятия. */
+    private static final int CANCELLED_LIGHT = 0xFF9E9E9E;
+    private static final int CANCELLED_DARK = 0xFF7C8098;
+
     /** Время звонков по будням (Пн-Пт). Индекс = номер пары - 1. */
     private static final String[][] WEEK = {
             {"08:30", "10:05"}, {"10:15", "11:50"}, {"12:40", "14:15"},
@@ -43,6 +54,16 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
             {"08:30", "10:05"}, {"10:15", "11:50"}, {"12:00", "13:35"},
             {"13:45", "15:20"}, {"15:30", "17:05"}, {"17:15", "18:40"}, {"18:50", "20:15"}
     };
+
+    /**
+     * Кэш фоновых drawable по ключу (цвет+альфа+радиус). Без него каждый
+     * onBindViewHolder создавал до 5 новых GradientDrawable — при 6-7 парах
+     * в день и частых notifyDataSetChanged (свайп дня, обновление недели)
+     * это лишняя нагрузка на GC на каждый скролл/обновление. Цветов и
+     * альфа-значений на практике меньше десятка (по типам занятий/корпусам),
+     * поэтому кэш маленький и не растёт бесконтрольно.
+     */
+    private final Map<Long, GradientDrawable> drawableCache = new HashMap<>();
 
     private List<ScheduleItem> lessons;
 
@@ -122,6 +143,36 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
         } else {
             h.tvWeekRange.setVisibility(View.GONE);
         }
+
+        // --- переносы/замены ---
+        // Отменённое (перенесённое на другое время) занятие НЕ скрываем из
+        // списка — если его просто убрать, пользователь не поймёт, куда оно
+        // делось, и может решить, что расписание сломалось. Вместо этого
+        // показываем его зачёркнутым и приглушённым с пояснением.
+        if (it.isCancelled()) {
+            h.tvSubject.setPaintFlags(h.tvSubject.getPaintFlags() | Paint.STRIKE_THRU_TEXT_FLAG);
+            h.itemView.setAlpha(0.55f);
+            int cc = dark ? CANCELLED_DARK : CANCELLED_LIGHT;
+            h.tvTransferNote.setVisibility(View.VISIBLE);
+            h.tvTransferNote.setText(it.getTransferNote() != null ? it.getTransferNote() : "Перенесено");
+            h.tvTransferNote.setBackground(tintedRound(ctx, cc, boxAlpha, 6));
+            h.tvTransferNote.setTextColor(cc);
+        } else {
+            h.tvSubject.setPaintFlags(h.tvSubject.getPaintFlags() & ~Paint.STRIKE_THRU_TEXT_FLAG);
+            h.itemView.setAlpha(1f);
+            if (it.isTransferred()) {
+                int tcColor = dark ? TRANSFER_DARK : TRANSFER_LIGHT;
+                h.tvTransferNote.setVisibility(View.VISIBLE);
+                String note = it.getTransferNote();
+                h.tvTransferNote.setText(note != null && !note.isEmpty()
+                        ? note
+                        : (it.isMovedIn() ? "Перенесённое занятие" : "Замена аудитории"));
+                h.tvTransferNote.setBackground(tintedRound(ctx, tcColor, boxAlpha, 6));
+                h.tvTransferNote.setTextColor(tcColor);
+            } else {
+                h.tvTransferNote.setVisibility(View.GONE);
+            }
+        }
     }
 
     private void setOrHide(TextView tv, String v) {
@@ -129,12 +180,30 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
         else tv.setVisibility(View.GONE);
     }
 
-    /** Прямоугольник со скруглением и полупрозрачной заливкой цветом. */
-    private static GradientDrawable tintedRound(Context c, int color, float alpha, int radiusDp) {
+    /** Прямоугольник со скруглением и полупрозрачной заливкой цветом — с кэшированием. */
+    private GradientDrawable tintedRound(Context c, int color, float alpha, int radiusDp) {
+        float radiusPx = radiusDp * c.getResources().getDisplayMetrics().density;
+        int argb = withAlpha(color, alpha);
+        // Ключ трёх независимых величин упаковываем в один long, чтобы не
+        // заводить отдельный класс-обёртку только ради HashMap-ключа.
+        long key = (((long) argb) << 32) ^ Float.floatToRawIntBits(radiusPx);
+
+        GradientDrawable cached = drawableCache.get(key);
+        if (cached != null) {
+            // newDrawable() из ConstantState — официально безопасный способ
+            // получить независимый экземпляр с теми же параметрами без
+            // повторного выделения памяти под сам GradientDrawable.Builder;
+            // так каждый View получает свой объект (setBounds не пересекается
+            // между View), но тяжёлая часть (константное состояние) переиспользуется.
+            Drawable.ConstantState state = cached.getConstantState();
+            if (state != null) return (GradientDrawable) state.newDrawable(c.getResources()).mutate();
+        }
+
         GradientDrawable g = new GradientDrawable();
         g.setShape(GradientDrawable.RECTANGLE);
-        g.setColor(withAlpha(color, alpha));
-        g.setCornerRadius(radiusDp * c.getResources().getDisplayMetrics().density);
+        g.setColor(argb);
+        g.setCornerRadius(radiusPx);
+        drawableCache.put(key, g);
         return g;
     }
 
@@ -175,7 +244,7 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
         CardView cardView;
         View roomChip;
         TextView tvLessonNumber, tvTimeStart, tvTimeEnd, tvSubject, tvLessonType,
-                 tvTeacher, tvBuilding, tvRoom, tvGroups, tvOnline, tvWeekRange;
+                 tvTeacher, tvBuilding, tvRoom, tvGroups, tvOnline, tvWeekRange, tvTransferNote;
         ViewHolder(@NonNull View v) {
             super(v);
             cardView       = v.findViewById(R.id.cardView);
@@ -191,6 +260,7 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
             tvGroups       = v.findViewById(R.id.tvGroups);
             tvOnline       = v.findViewById(R.id.tvOnline);
             tvWeekRange    = v.findViewById(R.id.tvWeekRange);
+            tvTransferNote = v.findViewById(R.id.tvTransferNote);
         }
     }
 }

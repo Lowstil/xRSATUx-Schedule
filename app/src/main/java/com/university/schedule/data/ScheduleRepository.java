@@ -5,6 +5,7 @@ import android.util.Log;
 
 import com.university.schedule.data.db.HolidayDao;
 import com.university.schedule.data.db.ScheduleDao;
+import com.university.schedule.data.db.TransferDao;
 import com.university.schedule.data.db.UserDao;
 import com.university.schedule.logic.HolidayChecker;
 import com.university.schedule.logic.ScheduleFilter;
@@ -14,6 +15,7 @@ import com.university.schedule.model.DaySchedule;
 import com.university.schedule.model.Holiday;
 import com.university.schedule.model.ScheduleItem;
 import com.university.schedule.model.SemesterInfo;
+import com.university.schedule.model.TransferItem;
 import com.university.schedule.model.WeekSchedule;
 import com.university.schedule.util.Constants;
 import com.university.schedule.util.DateUtils;
@@ -45,8 +47,10 @@ public class ScheduleRepository {
     private final ScheduleDao scheduleDao;
     private final UserDao userDao;
     private final HolidayDao holidayDao;
+    private final TransferDao transferDao;
     private final NetworkClient networkClient;
     private final ExcelParser excelParser;
+    private final TransferParser transferParser;
     private final PrefsManager prefsManager;
 
     private HolidayChecker holidayChecker;
@@ -67,8 +71,10 @@ public class ScheduleRepository {
         this.scheduleDao = new ScheduleDao(this.context);
         this.userDao = new UserDao(this.context);
         this.holidayDao = new HolidayDao(this.context);
+        this.transferDao = new TransferDao(this.context);
         this.networkClient = new NetworkClient(this.context);
         this.excelParser = new ExcelParser();
+        this.transferParser = new TransferParser();
         this.prefsManager = new PrefsManager(this.context);
         initLogic();
     }
@@ -91,7 +97,7 @@ public class ScheduleRepository {
 
     // ---------------- загрузка ----------------
 
-    /** Полный цикл: сеть -> парсинг -> БД. Вызывать из фонового потока. */
+    /** Полный цикл: сеть -> парсинг -> БД (расписание + переносы). Вызывать из фонового потока. */
     public void loadScheduleFromNetwork(LoadCallback cb) {
         try {
             cb.onProgress("Загрузка файла расписания...");
@@ -100,6 +106,20 @@ public class ScheduleRepository {
             parseAndSave(file, cb);
             prefsManager.saveLastUpdated(DateUtils.nowIsoDateTime());
             userDao.touchLastUpdated();
+
+            // Переносы — отдельный файл на отдельной странице; ошибка их
+            // загрузки НЕ должна проваливать загрузку основного расписания
+            // (это дополнительные данные, а не критичные).
+            try {
+                cb.onProgress("Загрузка переносов занятий...");
+                File transfersFile = networkClient.downloadTransfersSync();
+                cb.onProgress("Обработка переносов...");
+                parseAndSaveTransfers(transfersFile, cb);
+                prefsManager.saveTransfersLastUpdated(DateUtils.nowIsoDateTime());
+            } catch (Exception e) {
+                Log.w(TAG, "Не удалось обновить переносы (расписание всё равно обновлено): " + e.getMessage());
+            }
+
             cb.onSuccess();
         } catch (Exception e) {
             Log.e(TAG, "Ошибка загрузки", e);
@@ -122,17 +142,37 @@ public class ScheduleRepository {
         scheduleDao.replaceAll(all);
     }
 
-    /** Парсит кэш без сети. true если получилось. */
+    /** Парсит локальный xlsx с переносами и кладёт в БД. */
+    public void parseAndSaveTransfers(File xlsx, LoadCallback cb) throws Exception {
+        List<TransferItem> items;
+        try (FileInputStream is = new FileInputStream(xlsx)) {
+            items = transferParser.parse(is);
+        }
+        cb.onProgress("Сохранение переносов в БД (" + items.size() + " записей)...");
+        transferDao.replaceAll(items);
+    }
+
+    /** Парсит кэш расписания без сети. true если получилось. */
     public boolean loadFromCache() {
         File f = networkClient.getCachedFile();
         if (f == null) return false;
         try {
             parseAndSave(f, NOOP);
-            return true;
         } catch (Exception e) {
-            Log.e(TAG, "Ошибка чтения кэша", e);
+            Log.e(TAG, "Ошибка чтения кэша расписания", e);
             return false;
         }
+        // Переносы — необязательный кэш: если его нет или он битый, само
+        // расписание всё равно должно открыться.
+        File tf = networkClient.getCachedTransfersFile();
+        if (tf != null) {
+            try {
+                parseAndSaveTransfers(tf, NOOP);
+            } catch (Exception e) {
+                Log.w(TAG, "Ошибка чтения кэша переносов (не критично): " + e.getMessage());
+            }
+        }
+        return true;
     }
 
     // ---------------- запросы расписания ----------------
@@ -141,14 +181,18 @@ public class ScheduleRepository {
         String wt = (week % 2 == 0) ? Constants.WEEK_TYPE_EVEN : Constants.WEEK_TYPE_ODD;
         List<ScheduleItem> items = scheduleDao.getScheduleForGroup(group, wt);
         LocalDate monday = weekCalculator.getMondayOfWeek(week);
-        return scheduleFilter.buildWeekSchedule(items, week, wt, monday);
+        LocalDate saturday = monday.plusDays(5);
+        List<TransferItem> transfers = transferDao.getForDateRange(monday.toString(), saturday.toString());
+        return scheduleFilter.buildWeekSchedule(items, week, wt, monday, transfers, group, true);
     }
 
     public WeekSchedule getWeekScheduleForTeacher(String teacher, int week) {
         String wt = (week % 2 == 0) ? Constants.WEEK_TYPE_EVEN : Constants.WEEK_TYPE_ODD;
         List<ScheduleItem> items = scheduleDao.getScheduleForTeacher(teacher, wt);
         LocalDate monday = weekCalculator.getMondayOfWeek(week);
-        return scheduleFilter.buildWeekSchedule(items, week, wt, monday);
+        LocalDate saturday = monday.plusDays(5);
+        List<TransferItem> transfers = transferDao.getForDateRange(monday.toString(), saturday.toString());
+        return scheduleFilter.buildWeekSchedule(items, week, wt, monday, transfers, teacher, false);
     }
 
     public DaySchedule getTodayScheduleForGroup(String group) {
@@ -178,7 +222,8 @@ public class ScheduleRepository {
         List<ScheduleItem> items = group
                 ? scheduleDao.getScheduleForGroup(name, wt)
                 : scheduleDao.getScheduleForTeacher(name, wt);
-        return scheduleFilter.buildDaySchedule(items, dow, week, wt, today);
+        List<TransferItem> transfers = transferDao.getForDate(today.toString());
+        return scheduleFilter.buildDaySchedule(items, dow, week, wt, today, transfers, name, group);
     }
 
     // ---------------- справочники ----------------
@@ -244,10 +289,15 @@ public class ScheduleRepository {
         return prefsManager.getLastUpdated();
     }
 
+    public String getTransfersLastUpdated() {
+        return prefsManager.getTransfersLastUpdated();
+    }
+
     public void clearAllData() {
         scheduleDao.clearAll();
         userDao.clear();
         holidayDao.clear();
+        transferDao.clearAll();
         networkClient.clearCache();
         prefsManager.clearAll();
         refreshLogic();
