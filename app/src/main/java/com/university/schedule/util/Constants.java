@@ -63,8 +63,13 @@ public final class Constants {
     public static final String[] DAY_NAMES_SHORT = { "ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ" };
 
     public static String getLessonTimeLabel(int dayOfWeek, int lessonNumber) {
-        String[][] t = (dayOfWeek >= 1 && dayOfWeek <= 5) ? TIMES_WEEKDAY : TIMES_WEEKEND;
+        String[][] t = getLessonTimes(dayOfWeek);
         if (lessonNumber < 1 || lessonNumber > t.length) return "";
         return t[lessonNumber - 1][0] + "–" + t[lessonNumber - 1][1];
+    }
+
+    /** Полная таблица времени звонков для дня недели (1=ПН..6=СБ). Будни/суббота отличаются. */
+    public static String[][] getLessonTimes(int dayOfWeek) {
+        return (dayOfWeek >= 1 && dayOfWeek <= 5) ? TIMES_WEEKDAY : TIMES_WEEKEND;
     }
 }

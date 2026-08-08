@@ -1,8 +1,6 @@
 package com.university.schedule.data;
-
 import android.content.Context;
 import android.util.Log;
-
 import com.university.schedule.data.db.HolidayDao;
 import com.university.schedule.data.db.ScheduleDao;
 import com.university.schedule.data.db.TransferDao;
@@ -20,20 +18,14 @@ import com.university.schedule.model.WeekSchedule;
 import com.university.schedule.util.Constants;
 import com.university.schedule.util.DateUtils;
 import com.university.schedule.util.PrefsManager;
-
 import java.io.File;
 import java.io.FileInputStream;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.time.ZoneId;
-/**
- * Единая точка доступа к данным. Координирует NetworkClient -> ExcelParser ->
- * ScheduleDao -> ScheduleFilter. Все методы, кроме геттеров настроек,
- * предполагается вызывать из фонового потока (тяжёлые: сеть/парсинг/БД).
- */
-public class ScheduleRepository {
 
+public class ScheduleRepository {
     private static final String TAG = "ScheduleRepository";
     private static volatile ScheduleRepository instance;
 
@@ -52,7 +44,6 @@ public class ScheduleRepository {
     private final ExcelParser excelParser;
     private final TransferParser transferParser;
     private final PrefsManager prefsManager;
-
     private HolidayChecker holidayChecker;
     private WeekCalculator weekCalculator;
     private ScheduleFilter scheduleFilter;
@@ -83,12 +74,32 @@ public class ScheduleRepository {
         List<Holiday> extra = holidayDao.getAll();
         this.holidayChecker = new HolidayChecker(extra);
         LocalDate start = prefsManager.getSemesterStart();
-        if (start == null) {
-            start = SemesterManager.getDefaultSemesterStart();
-            prefsManager.saveSemesterStart(start);
+        LocalDate today = DateUtils.todayMoscow();
+        // ФИКС подсветки: сохранённое начало семестра могло устареть (его записали
+        // один раз при первом запуске). Если "сегодня" не попадает в сохранённый
+        // семестр (18 недель), weekNum становится -1, MainActivity затыкает его
+        // единицей, открытая неделя показывает даты не-сегодня, и matchesKey()
+        // в адаптере никогда не совпадает -> подсветка "Идёт сейчас"/"Следующая"
+        // не зажигается. Поэтому пересчитываем начало семестра под текущую дату.
+        if (start == null || !isWithinSemester(start, today)) {
+            LocalDate rolled = SemesterManager.getDefaultSemesterStart();
+            // Если эвристика всё равно не покрывает дату (каникулы) — оставляем
+            // сохранённое значение, если оно было, чтобы не терять выбор пользователя.
+            if (rolled != null && (start == null || isWithinSemester(rolled, today) || !isWithinSemester(start, today))) {
+                start = rolled;
+                prefsManager.saveSemesterStart(start);
+                Log.d(TAG, "Начало семестра актуализировано: " + start);
+            }
         }
         this.weekCalculator = new WeekCalculator(new SemesterInfo(start));
         this.scheduleFilter = new ScheduleFilter(holidayChecker);
+    }
+
+    /** Попадает ли дата в семестр [start .. start+18 недель). */
+    private static boolean isWithinSemester(LocalDate start, LocalDate date) {
+        if (start == null || date == null) return false;
+        LocalDate end = start.plusWeeks(SemesterInfo.TOTAL_WEEKS);
+        return !date.isBefore(start) && date.isBefore(end);
     }
 
     public void refreshLogic() {
@@ -96,8 +107,6 @@ public class ScheduleRepository {
     }
 
     // ---------------- загрузка ----------------
-
-    /** Полный цикл: сеть -> парсинг -> БД (расписание + переносы). Вызывать из фонового потока. */
     public void loadScheduleFromNetwork(LoadCallback cb) {
         try {
             cb.onProgress("Загрузка файла расписания...");
@@ -106,10 +115,6 @@ public class ScheduleRepository {
             parseAndSave(file, cb);
             prefsManager.saveLastUpdated(DateUtils.nowIsoDateTime());
             userDao.touchLastUpdated();
-
-            // Переносы — отдельный файл на отдельной странице; ошибка их
-            // загрузки НЕ должна проваливать загрузку основного расписания
-            // (это дополнительные данные, а не критичные).
             try {
                 cb.onProgress("Загрузка переносов занятий...");
                 File transfersFile = networkClient.downloadTransfersSync();
@@ -119,7 +124,6 @@ public class ScheduleRepository {
             } catch (Exception e) {
                 Log.w(TAG, "Не удалось обновить переносы (расписание всё равно обновлено): " + e.getMessage());
             }
-
             cb.onSuccess();
         } catch (Exception e) {
             Log.e(TAG, "Ошибка загрузки", e);
@@ -127,7 +131,6 @@ public class ScheduleRepository {
         }
     }
 
-    /** Парсит локальный xlsx и кладёт в БД (лист групп + лист преподавателей). */
     public void parseAndSave(File xlsx, LoadCallback cb) throws Exception {
         List<ScheduleItem> all = new ArrayList<>();
         try (FileInputStream is = new FileInputStream(xlsx)) {
@@ -142,7 +145,6 @@ public class ScheduleRepository {
         scheduleDao.replaceAll(all);
     }
 
-    /** Парсит локальный xlsx с переносами и кладёт в БД. */
     public void parseAndSaveTransfers(File xlsx, LoadCallback cb) throws Exception {
         List<TransferItem> items;
         try (FileInputStream is = new FileInputStream(xlsx)) {
@@ -152,7 +154,6 @@ public class ScheduleRepository {
         transferDao.replaceAll(items);
     }
 
-    /** Парсит кэш расписания без сети. true если получилось. */
     public boolean loadFromCache() {
         File f = networkClient.getCachedFile();
         if (f == null) return false;
@@ -162,8 +163,6 @@ public class ScheduleRepository {
             Log.e(TAG, "Ошибка чтения кэша расписания", e);
             return false;
         }
-        // Переносы — необязательный кэш: если его нет или он битый, само
-        // расписание всё равно должно открыться.
         File tf = networkClient.getCachedTransfersFile();
         if (tf != null) {
             try {
@@ -176,7 +175,6 @@ public class ScheduleRepository {
     }
 
     // ---------------- запросы расписания ----------------
-
     public WeekSchedule getWeekScheduleForGroup(String group, int week) {
         String wt = (week % 2 == 0) ? Constants.WEEK_TYPE_EVEN : Constants.WEEK_TYPE_ODD;
         List<ScheduleItem> items = scheduleDao.getScheduleForGroup(group, wt);
@@ -227,7 +225,6 @@ public class ScheduleRepository {
     }
 
     // ---------------- справочники ----------------
-
     public List<String> getAllGroups() {
         return scheduleDao.extractDistinctGroups();
     }
@@ -241,7 +238,6 @@ public class ScheduleRepository {
     }
 
     // ---------------- настройки ----------------
-
     public void saveUserSelection(String type, String name) {
         LocalDate start = prefsManager.getSemesterStart();
         if (start == null) start = SemesterManager.getDefaultSemesterStart();
