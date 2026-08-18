@@ -15,9 +15,7 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 
 /**
@@ -48,7 +46,6 @@ public class TransferParser {
 
     private static final String TAG = "TransferParser";
     private static final long MAX_XLSX_SIZE_BYTES = 50L * 1024 * 1024; // 50 МБ
-    private static final ZoneId MOSCOW = ZoneId.of("Europe/Moscow");
 
     public List<TransferItem> parse(InputStream in) throws Exception {
         List<TransferItem> result = new ArrayList<>();
@@ -202,8 +199,21 @@ public class TransferParser {
         if (cell == null) return null;
         try {
             if (cell.getCellType() == CellType.NUMERIC && DateUtil.isCellDateFormatted(cell)) {
-                Date d = cell.getDateCellValue();
-                return d.toInstant().atZone(MOSCOW).toLocalDate();
+                // ВАЖНО: раньше здесь было cell.getDateCellValue() + .atZone(MOSCOW).
+                // getDateCellValue() внутри уже конвертирует серийное число Excel в
+                // java.util.Date, используя ЧАСОВОЙ ПОЯС УСТРОЙСТВА (TimeZone.getDefault())
+                // — это задокументированное поведение Apache POI. Повторная
+                // интерпретация этого момента времени как московского через
+                // .atZone(MOSCOW) накладывала два РАЗНЫХ, никак не связанных
+                // друг с другом часовых пояса один поверх другого. На устройстве
+                // не с московским часовым поясом это могло сдвинуть дату переноса
+                // на день около полуночи. Excel вообще не хранит информацию о
+                // часовом поясе (даты — "наивные" календарные значения), поэтому
+                // правильный способ прочитать дату — DateUtil.getLocalDateTime(),
+                // который читает серийное число как обычную календарную дату без
+                // какой-либо конвертации зоны — именно так, как её видит человек,
+                // открывший файл в Excel, независимо от часового пояса устройства.
+                return DateUtil.getLocalDateTime(cell.getNumericCellValue()).toLocalDate();
             }
             if (cell.getCellType() == CellType.STRING) {
                 String s = cell.getStringCellValue();

@@ -9,7 +9,8 @@ android {
     defaultConfig {
         applicationId "com.university.schedule"
         minSdkVersion 26
-        targetSdk 34
+        //noinspection ExpiredTargetSdkVersion
+        targetSdk 27
         versionCode 1
         versionName "1.0"
     }
@@ -59,4 +60,6 @@ dependencies {
     implementation 'org.apache.commons:commons-compress:1.26.1'
 
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    testImplementation 'junit:junit:4.13.2'
 }

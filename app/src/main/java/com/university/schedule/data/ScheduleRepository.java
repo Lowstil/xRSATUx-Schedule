@@ -23,7 +23,6 @@ import java.io.FileInputStream;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
-import java.time.ZoneId;
 
 public class ScheduleRepository {
     private static final String TAG = "ScheduleRepository";
@@ -75,16 +74,8 @@ public class ScheduleRepository {
         this.holidayChecker = new HolidayChecker(extra);
         LocalDate start = prefsManager.getSemesterStart();
         LocalDate today = DateUtils.todayMoscow();
-        // ФИКС подсветки: сохранённое начало семестра могло устареть (его записали
-        // один раз при первом запуске). Если "сегодня" не попадает в сохранённый
-        // семестр (18 недель), weekNum становится -1, MainActivity затыкает его
-        // единицей, открытая неделя показывает даты не-сегодня, и matchesKey()
-        // в адаптере никогда не совпадает -> подсветка "Идёт сейчас"/"Следующая"
-        // не зажигается. Поэтому пересчитываем начало семестра под текущую дату.
         if (start == null || !isWithinSemester(start, today)) {
             LocalDate rolled = SemesterManager.getDefaultSemesterStart();
-            // Если эвристика всё равно не покрывает дату (каникулы) — оставляем
-            // сохранённое значение, если оно было, чтобы не терять выбор пользователя.
             if (rolled != null && (start == null || isWithinSemester(rolled, today) || !isWithinSemester(start, today))) {
                 start = rolled;
                 prefsManager.saveSemesterStart(start);
@@ -95,7 +86,6 @@ public class ScheduleRepository {
         this.scheduleFilter = new ScheduleFilter(holidayChecker);
     }
 
-    /** Попадает ли дата в семестр [start .. start+18 недель). */
     private static boolean isWithinSemester(LocalDate start, LocalDate date) {
         if (start == null || date == null) return false;
         LocalDate end = start.plusWeeks(SemesterInfo.TOTAL_WEEKS);
@@ -106,7 +96,6 @@ public class ScheduleRepository {
         initLogic();
     }
 
-    // ---------------- загрузка ----------------
     public void loadScheduleFromNetwork(LoadCallback cb) {
         try {
             cb.onProgress("Загрузка файла расписания...");
@@ -174,7 +163,6 @@ public class ScheduleRepository {
         return true;
     }
 
-    // ---------------- запросы расписания ----------------
     public WeekSchedule getWeekScheduleForGroup(String group, int week) {
         String wt = (week % 2 == 0) ? Constants.WEEK_TYPE_EVEN : Constants.WEEK_TYPE_ODD;
         List<ScheduleItem> items = scheduleDao.getScheduleForGroup(group, wt);
@@ -202,7 +190,18 @@ public class ScheduleRepository {
     }
 
     private DaySchedule todayFor(String name, boolean group) {
-        LocalDate today = LocalDate.now(ZoneId.of("Europe/Moscow"));
+        // ВАЖНО: раньше здесь стояло LocalDate.now(ZoneId.of("Europe/Moscow")) —
+        // жёстко зашитая московская зона в обход DateUtils.todayMoscow(),
+        // который в одном из патчей был переведён на часы устройства
+        // (ZoneId.systemDefault()) специально для того, чтобы подсветка
+        // "сейчас/следующая" совпадала с реальным временем на телефоне при
+        // тестировании через ручную смену даты. Из-за этого расхождения
+        // initLogic()/ScheduleClock видели одно "сегодня" (по часам
+        // устройства), а todayFor() — другое (всегда по Москве), и в
+        // зависимости от того, какой путь кода отработал первым, поведение
+        // могло отличаться. Теперь оба места используют один и тот же
+        // источник правды.
+        LocalDate today = DateUtils.todayMoscow();
         int week = weekCalculator.getWeekNumber(today);
         int dow = DateUtils.toScheduleDayOfWeek(today);
         if (week < 0) {
@@ -224,7 +223,6 @@ public class ScheduleRepository {
         return scheduleFilter.buildDaySchedule(items, dow, week, wt, today, transfers, name, group);
     }
 
-    // ---------------- справочники ----------------
     public List<String> getAllGroups() {
         return scheduleDao.extractDistinctGroups();
     }
@@ -237,7 +235,6 @@ public class ScheduleRepository {
         return !scheduleDao.isEmpty();
     }
 
-    // ---------------- настройки ----------------
     public void saveUserSelection(String type, String name) {
         LocalDate start = prefsManager.getSemesterStart();
         if (start == null) start = SemesterManager.getDefaultSemesterStart();

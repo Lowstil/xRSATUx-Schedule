@@ -44,7 +44,7 @@ public class ExcelParser {
             Pattern.compile("(?<![\\p{L}0-9])(оЛ|оП|ЛР|Экзамен|Л|П)(?![\\p{L}0-9])");
 
     private static final Pattern GROUP_TOKEN =
-            Pattern.compile("^[A-Za-zА-ЯЁ][A-Za-zА-ЯЁ0-9()]*-\\d+[A-Za-zА-ЯЁ0-9().-]*$");
+            Pattern.compile("^[A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё0-9()]*-\\d+[A-Za-zА-Яа-яЁё0-9().-]*$");
 
     private static final Pattern ROOM_TOKEN =
             Pattern.compile("^[А-ЯЁA-Za-z]?\\d+-\\d+([а-яА-ЯёЁ])?$|^[А-ЯЁA-Za-z]+-\\d+(-\\d+)*([а-яА-ЯёЁ])?$");
@@ -153,7 +153,14 @@ public class ExcelParser {
         return -1;
     }
 
-    private ScheduleItem parseLine(String raw, String weekType, int day, int lesson,
+    /**
+     * Разбирает содержимое одной ячейки расписания в ScheduleItem.
+     * Видимость сужена до пакета (не private) намеренно — это даёт юнит-тестам
+     * в src/test/.../ExcelParserTest.java возможность проверять разбор
+     * конкретных строк напрямую, без сборки целого .xlsx файла в памяти.
+     * Публичным API класса это не считается — метод не виден за пределами пакета.
+     */
+    ScheduleItem parseLine(String raw, String weekType, int day, int lesson,
                                    String colName, String source) {
         if (raw == null) return null;
         String line = raw.trim();
