@@ -1,6 +1,8 @@
 package com.university.schedule.data;
+
 import android.content.Context;
 import android.util.Log;
+
 import com.university.schedule.data.db.HolidayDao;
 import com.university.schedule.data.db.ScheduleDao;
 import com.university.schedule.data.db.TransferDao;
@@ -20,6 +22,7 @@ import com.university.schedule.widget.TodayScheduleWidgetProvider;
 import com.university.schedule.util.Constants;
 import com.university.schedule.util.DateUtils;
 import com.university.schedule.util.PrefsManager;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.time.LocalDate;
@@ -33,8 +36,6 @@ public class ScheduleRepository {
 
     public interface LoadCallback {
         void onSuccess();
-        /** message теперь классифицированная ошибка (см. AppError) — уже готовое
-         *  понятное сообщение для пользователя, а не текст исключения "как есть". */
         void onError(AppError error);
         void onProgress(String message);
     }
@@ -48,6 +49,7 @@ public class ScheduleRepository {
     private final ExcelParser excelParser;
     private final TransferParser transferParser;
     private final PrefsManager prefsManager;
+
     private HolidayChecker holidayChecker;
     private WeekCalculator weekCalculator;
     private ScheduleFilter scheduleFilter;
@@ -77,6 +79,7 @@ public class ScheduleRepository {
     private void initLogic() {
         List<Holiday> extra = holidayDao.getAll();
         this.holidayChecker = new HolidayChecker(extra);
+
         LocalDate start = prefsManager.getSemesterStart();
         LocalDate today = DateUtils.todayMoscow();
         if (start == null || !isWithinSemester(start, today)) {
@@ -97,18 +100,17 @@ public class ScheduleRepository {
         return !date.isBefore(start) && date.isBefore(end);
     }
 
-    public void refreshLogic() {
-        initLogic();
-    }
+    public void refreshLogic() { initLogic(); }
 
     public void loadScheduleFromNetwork(LoadCallback cb) {
         try {
             cb.onProgress("Загрузка файла расписания...");
-            File file = networkClient.downloadSync(Constants.SCHEDULE_URL);
+            File file = networkClient.downloadScheduleSync();
             cb.onProgress("Обработка файла...");
             parseAndSave(file, cb);
             prefsManager.saveLastUpdated(DateUtils.nowIsoDateTime());
             userDao.touchLastUpdated();
+
             try {
                 cb.onProgress("Загрузка переносов занятий...");
                 File transfersFile = networkClient.downloadTransfersSync();
@@ -118,10 +120,7 @@ public class ScheduleRepository {
             } catch (Exception e) {
                 Log.w(TAG, "Не удалось обновить переносы (расписание всё равно обновлено): " + e.getMessage());
             }
-            // Обновляем виджет на главном экране сразу после успешной загрузки —
-            // системный updatePeriodMillis (30 минут в widget_today_schedule_info.xml)
-            // это лишь подстраховка, реальное обновление виджета должно быть
-            // мгновенным после того, как расписание реально изменилось.
+            
             TodayScheduleWidgetProvider.updateAllWidgets(context);
             cb.onSuccess();
         } catch (Exception e) {
@@ -130,63 +129,19 @@ public class ScheduleRepository {
         }
     }
 
-    /**
-     * Задача 5: проверяет, пора ли автоматически обновить расписание/переносы
-     * (раз в сутки, см. DateUtils.AUTO_REFRESH_INTERVAL_HOURS). Учитывает и
-     * успешные обновления (lastUpdated), и сами попытки (lastAutoRefreshAttempt) —
-     * второе нужно, чтобы при недоступном интернете приложение не пыталось
-     * стучаться на сервер при каждом запуске, а не только при успешных
-     * обновлениях.
-     */
-    public boolean shouldAutoRefresh() {
-        LocalDateTime lastSuccess = DateUtils.parseIsoDateTime(prefsManager.getLastUpdated());
-        LocalDateTime lastAttempt = DateUtils.parseIsoDateTime(prefsManager.getLastAutoRefreshAttempt());
-        LocalDateTime mostRecent = latest(lastSuccess, lastAttempt);
-        return DateUtils.isAutoRefreshDue(mostRecent, LocalDateTime.now());
-    }
-
-    private static LocalDateTime latest(LocalDateTime a, LocalDateTime b) {
-        if (a == null) return b;
-        if (b == null) return a;
-        return a.isAfter(b) ? a : b;
-    }
-
-    /**
-     * Запускает автообновление в фоне, если shouldAutoRefresh() вернул true —
-     * иначе просто вызывает cb.onSuccess() без сетевого запроса (ничего
-     * обновлять не требуется, UI может продолжать как обычно). Момент
-     * попытки фиксируется ДО результата — если сети нет, следующая попытка
-     * будет не раньше чем через сутки, а не при каждом следующем запуске.
-     * Вызывать из фонового потока, не из UI.
-     */
-    public void maybeAutoRefresh(LoadCallback cb) {
-        if (!shouldAutoRefresh()) {
-            cb.onSuccess();
-            return;
-        }
-        prefsManager.saveLastAutoRefreshAttempt(DateUtils.nowIsoDateTime());
-        loadScheduleFromNetwork(cb);
-    }
-
     public void parseAndSave(File xlsx, LoadCallback cb) throws Exception {
         List<ScheduleItem> all = new ArrayList<>();
-        try (FileInputStream is = new FileInputStream(xlsx)) {
-            all.addAll(excelParser.parseGroups(is));
-        }
-        try (FileInputStream is = new FileInputStream(xlsx)) {
-            all.addAll(excelParser.parseTeachers(is));
-        } catch (Exception e) {
-            Log.w(TAG, "Лист преподавателей не распознан: " + e.getMessage());
-        }
+        try (FileInputStream is = new FileInputStream(xlsx)) { all.addAll(excelParser.parseGroups(is)); }
+        try (FileInputStream is = new FileInputStream(xlsx)) { all.addAll(excelParser.parseTeachers(is)); } 
+        catch (Exception e) { Log.w(TAG, "Лист преподавателей не распознан: " + e.getMessage()); }
+        
         cb.onProgress("Сохранение в БД (" + all.size() + " записей)...");
         scheduleDao.replaceAll(all);
     }
 
     public void parseAndSaveTransfers(File xlsx, LoadCallback cb) throws Exception {
         List<TransferItem> items;
-        try (FileInputStream is = new FileInputStream(xlsx)) {
-            items = transferParser.parse(is);
-        }
+        try (FileInputStream is = new FileInputStream(xlsx)) { items = transferParser.parse(is); }
         cb.onProgress("Сохранение переносов в БД (" + items.size() + " записей)...");
         transferDao.replaceAll(items);
     }
@@ -194,19 +149,13 @@ public class ScheduleRepository {
     public boolean loadFromCache() {
         File f = networkClient.getCachedFile();
         if (f == null) return false;
-        try {
-            parseAndSave(f, NOOP);
-        } catch (Exception e) {
-            Log.e(TAG, "Ошибка чтения кэша расписания", e);
-            return false;
-        }
+        try { parseAndSave(f, NOOP); } 
+        catch (Exception e) { Log.e(TAG, "Ошибка чтения кэша расписания", e); return false; }
+        
         File tf = networkClient.getCachedTransfersFile();
         if (tf != null) {
-            try {
-                parseAndSaveTransfers(tf, NOOP);
-            } catch (Exception e) {
-                Log.w(TAG, "Ошибка чтения кэша переносов (не критично): " + e.getMessage());
-            }
+            try { parseAndSaveTransfers(tf, NOOP); } 
+            catch (Exception e) { Log.w(TAG, "Ошибка чтения кэша переносов (не критично): " + e.getMessage()); }
         }
         return true;
     }
@@ -229,40 +178,23 @@ public class ScheduleRepository {
         return scheduleFilter.buildWeekSchedule(items, week, wt, monday, transfers, teacher, false);
     }
 
-    public DaySchedule getTodayScheduleForGroup(String group) {
-        return todayFor(group, true);
-    }
-
-    public DaySchedule getTodayScheduleForTeacher(String teacher) {
-        return todayFor(teacher, false);
-    }
+    public DaySchedule getTodayScheduleForGroup(String group) { return todayFor(group, true); }
+    public DaySchedule getTodayScheduleForTeacher(String teacher) { return todayFor(teacher, false); }
 
     private DaySchedule todayFor(String name, boolean group) {
-        // ВАЖНО: раньше здесь стояло LocalDate.now(ZoneId.of("Europe/Moscow")) —
-        // жёстко зашитая московская зона в обход DateUtils.todayMoscow(),
-        // который в одном из патчей был переведён на часы устройства
-        // (ZoneId.systemDefault()) специально для того, чтобы подсветка
-        // "сейчас/следующая" совпадала с реальным временем на телефоне при
-        // тестировании через ручную смену даты. Из-за этого расхождения
-        // initLogic()/ScheduleClock видели одно "сегодня" (по часам
-        // устройства), а todayFor() — другое (всегда по Москве), и в
-        // зависимости от того, какой путь кода отработал первым, поведение
-        // могло отличаться. Теперь оба места используют один и тот же
-        // источник правды.
         LocalDate today = DateUtils.todayMoscow();
         int week = weekCalculator.getWeekNumber(today);
         int dow = DateUtils.toScheduleDayOfWeek(today);
+
         if (week < 0) {
             DaySchedule d = new DaySchedule(dow, today);
-            d.setDayOff(true);
-            d.setHolidayName("Вне учебного семестра");
-            return d;
+            d.setDayOff(true); d.setHolidayName("Вне учебного семестра"); return d;
         }
         if (dow == 0) {
             DaySchedule d = new DaySchedule(0, today);
-            d.setDayOff(true);
-            return d;
+            d.setDayOff(true); return d;
         }
+
         String wt = weekCalculator.getWeekTypeForDate(today);
         List<ScheduleItem> items = group
                 ? scheduleDao.getScheduleForGroup(name, wt)
@@ -271,17 +203,9 @@ public class ScheduleRepository {
         return scheduleFilter.buildDaySchedule(items, dow, week, wt, today, transfers, name, group);
     }
 
-    public List<String> getAllGroups() {
-        return scheduleDao.extractDistinctGroups();
-    }
-
-    public List<String> getAllTeachers() {
-        return scheduleDao.extractDistinctTeachers();
-    }
-
-    public boolean hasScheduleData() {
-        return !scheduleDao.isEmpty();
-    }
+    public List<String> getAllGroups() { return scheduleDao.extractDistinctGroups(); }
+    public List<String> getAllTeachers() { return scheduleDao.extractDistinctTeachers(); }
+    public boolean hasScheduleData() { return !scheduleDao.isEmpty(); }
 
     public void saveUserSelection(String type, String name) {
         LocalDate start = prefsManager.getSemesterStart();
@@ -291,21 +215,10 @@ public class ScheduleRepository {
         prefsManager.saveSemesterStart(start);
     }
 
-    public UserDao.UserSettings getUserSettings() {
-        return userDao.getSettings();
-    }
-
-    public boolean hasUserSelection() {
-        return prefsManager.hasSelection();
-    }
-
-    public String getSelectionType() {
-        return prefsManager.getSelectionType();
-    }
-
-    public String getSelectionName() {
-        return prefsManager.getSelectionName();
-    }
+    public UserDao.UserSettings getUserSettings() { return userDao.getSettings(); }
+    public boolean hasUserSelection() { return prefsManager.hasSelection(); }
+    public String getSelectionType() { return prefsManager.getSelectionType(); }
+    public String getSelectionName() { return prefsManager.getSelectionName(); }
 
     public void updateSemesterStart(LocalDate start) {
         prefsManager.saveSemesterStart(start);
@@ -313,35 +226,36 @@ public class ScheduleRepository {
         refreshLogic();
     }
 
-    public LocalDate getSemesterStart() {
-        return prefsManager.getSemesterStart();
-    }
-
+    public LocalDate getSemesterStart() { return prefsManager.getSemesterStart(); }
     public SemesterInfo getSemesterInfo() {
         LocalDate s = prefsManager.getSemesterStart();
         return s != null ? new SemesterInfo(s) : null;
     }
-
-    public WeekCalculator getWeekCalculator() {
-        return weekCalculator;
-    }
-
-    public String getLastUpdated() {
-        return prefsManager.getLastUpdated();
-    }
-
-    public String getTransfersLastUpdated() {
-        return prefsManager.getTransfersLastUpdated();
-    }
+    public WeekCalculator getWeekCalculator() { return weekCalculator; }
+    public String getLastUpdated() { return prefsManager.getLastUpdated(); }
+    public String getTransfersLastUpdated() { return prefsManager.getTransfersLastUpdated(); }
 
     public void clearAllData() {
-        scheduleDao.clearAll();
-        userDao.clear();
-        holidayDao.clear();
-        transferDao.clearAll();
-        networkClient.clearCache();
-        prefsManager.clearAll();
-        refreshLogic();
+        scheduleDao.clearAll(); userDao.clear(); holidayDao.clear(); transferDao.clearAll();
+        networkClient.clearCache(); prefsManager.clearAll(); refreshLogic();
+    }
+
+    public boolean shouldAutoRefresh() {
+        LocalDateTime lastSuccess = DateUtils.parseIsoDateTime(prefsManager.getLastUpdated());
+        LocalDateTime lastAttempt = DateUtils.parseIsoDateTime(prefsManager.getLastAutoRefreshAttempt());
+        LocalDateTime mostRecent = latest(lastSuccess, lastAttempt);
+        return DateUtils.isAutoRefreshDue(mostRecent, LocalDateTime.now());
+    }
+
+    private static LocalDateTime latest(LocalDateTime a, LocalDateTime b) {
+        if (a == null) return b; if (b == null) return a;
+        return a.isAfter(b) ? a : b;
+    }
+
+    public void maybeAutoRefresh(LoadCallback cb) {
+        if (!shouldAutoRefresh()) { cb.onSuccess(); return; }
+        prefsManager.saveLastAutoRefreshAttempt(DateUtils.nowIsoDateTime());
+        loadScheduleFromNetwork(cb);
     }
 
     private static final LoadCallback NOOP = new LoadCallback() {

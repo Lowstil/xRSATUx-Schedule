@@ -2,7 +2,6 @@ package com.university.schedule.data;
 
 import android.content.Context;
 import android.util.Log;
-
 import com.university.schedule.util.Constants;
 
 import java.io.File;
@@ -21,16 +20,11 @@ import okhttp3.Response;
 import okhttp3.ResponseBody;
 
 public class NetworkClient {
-
     private static final String TAG = "NetworkClient";
-    /** Имя файла расписания, лежащего в app/src/main/assets/ (офлайн-копия). */
     private static final String ASSET_NAME = "schedule.xlsx";
-
-    /** Ищет в HTML ссылки вида href="....xlsx" (одинарные/двойные кавычки). */
     private static final Pattern XLSX_LINK_PATTERN =
             Pattern.compile("href=[\"']([^\"']+\\.xlsx)[\"']", Pattern.CASE_INSENSITIVE);
-
-    private static final long MAX_DOWNLOAD_BYTES = 50L * 1024 * 1024; // 50 МБ
+    private static final long MAX_DOWNLOAD_BYTES = 50L * 1024 * 1024;
 
     private final OkHttpClient client;
     private final Context context;
@@ -45,19 +39,55 @@ public class NetworkClient {
                 .build();
     }
 
-    /** Синхронно качает файл по url в кэш. При ЛЮБОЙ ошибке сети — берёт копию из assets. */
-    public File downloadSync(String url) throws IOException {
-        return downloadToCache(url, Constants.CACHE_FILE_NAME, true);
+    public File downloadScheduleSync() throws IOException {
+        String resolvedUrl = null;
+        try {
+            resolvedUrl = discoverScheduleUrl();
+        } catch (Exception e) {
+            Log.w(TAG, "Не удалось найти ссылку на основное расписание на странице: " + e.getMessage());
+        }
+        if (resolvedUrl == null) {
+            Log.w(TAG, "Использую запасную прямую ссылку на основное расписание");
+            resolvedUrl = Constants.SCHEDULE_FALLBACK_URL;
+        }
+        // ВАЖНО: fallbackToAssetsOnError = false. Если сеть недоступна или файл не найден,
+        // мы должны выбросить IOException, чтобы UI показал ошибку, а не молча подсовывал
+        // старый файл из assets, из-за чего и возникало ощущение, что "обновилось, но ничего не изменилось".
+        return downloadToCache(resolvedUrl, Constants.CACHE_FILE_NAME, false);
     }
 
-    /**
-     * Динамическая загрузка файла переносов: имя файла на сайте вуза может
-     * меняться (хэш в пути), поэтому сначала скачивается HTML страницы
-     * Constants.TRANSFERS_PAGE_URL, на ней ищется ссылка на .xlsx с
-     * фрагментом "перенос"/"perenos" в имени, и уже эта ссылка качается.
-     * Если поиск на странице не удался — используется запасная прямая
-     * ссылка Constants.TRANSFERS_FALLBACK_URL как последний рубеж.
-     */
+    private String discoverScheduleUrl() throws IOException {
+        Request request = new Request.Builder()
+                .url(Constants.SCHEDULE_PAGE_URL)
+                .header("User-Agent", "Mozilla/5.0 (Linux; Android 13) UniSchedule/1.0")
+                .build();
+        try (Response response = client.newCall(request).execute()) {
+            if (!response.isSuccessful()) throw new IOException("HTTP " + response.code());
+            ResponseBody body = response.body();
+            if (body == null) throw new IOException("Пустой ответ от страницы расписания");
+            String html = body.string();
+            String hint = Constants.SCHEDULE_FILENAME_HINT.toLowerCase();
+            Matcher m = XLSX_LINK_PATTERN.matcher(html);
+            String firstXlsx = null;
+            while (m.find()) {
+                String link = m.group(1);
+                if (firstXlsx == null) firstXlsx = link;
+                if (link.toLowerCase().contains(hint)) {
+                    String resolved = resolveUrl(Constants.SCHEDULE_PAGE_URL, link);
+                    Log.d(TAG, "Найдена ссылка на основное расписание: " + resolved);
+                    return resolved;
+                }
+            }
+            if (firstXlsx != null) {
+                String resolved = resolveUrl(Constants.SCHEDULE_PAGE_URL, firstXlsx);
+                Log.d(TAG, "Не найдено по хинту, берём первую .xlsx: " + resolved);
+                return resolved;
+            }
+            Log.w(TAG, "На странице не найдено ссылок .xlsx");
+            return null;
+        }
+    }
+
     public File downloadTransfersSync() throws IOException {
         String resolvedUrl = null;
         try {
@@ -72,12 +102,6 @@ public class NetworkClient {
         return downloadToCache(resolvedUrl, Constants.TRANSFERS_CACHE_FILE_NAME, false);
     }
 
-    /**
-     * Скачивает HTML-страницу Constants.TRANSFERS_PAGE_URL и ищет на ней первую
-     * ссылку на .xlsx, чьё имя содержит Constants.TRANSFERS_FILENAME_HINT
-     * (без учёта регистра). Относительные ссылки (без http/https) достраиваются
-     * до абсолютных на основе адреса самой страницы.
-     */
     private String discoverTransfersUrl() throws IOException {
         Request request = new Request.Builder()
                 .url(Constants.TRANSFERS_PAGE_URL)
@@ -88,7 +112,6 @@ public class NetworkClient {
             ResponseBody body = response.body();
             if (body == null) throw new IOException("Пустой ответ от страницы переносов");
             String html = body.string();
-
             String hint = Constants.TRANSFERS_FILENAME_HINT.toLowerCase();
             Matcher m = XLSX_LINK_PATTERN.matcher(html);
             while (m.find()) {
@@ -104,7 +127,6 @@ public class NetworkClient {
         }
     }
 
-    /** Достраивает относительную ссылку (например "/upload/iblock/.../file.xlsx") до абсолютной. */
     private String resolveUrl(String pageUrl, String maybeRelative) {
         if (maybeRelative.startsWith("http://") || maybeRelative.startsWith("https://")) {
             return maybeRelative;
@@ -129,12 +151,10 @@ public class NetworkClient {
                 if (!response.isSuccessful()) throw new IOException("HTTP " + response.code());
                 ResponseBody body = response.body();
                 if (body == null) throw new IOException("Пустой ответ");
-
                 long declaredLength = body.contentLength();
                 if (declaredLength > MAX_DOWNLOAD_BYTES) {
                     throw new IOException("Файл слишком большой: " + declaredLength + " байт");
                 }
-
                 File cacheFile = new File(context.getCacheDir(), cacheFileName);
                 File tmpFile = new File(context.getCacheDir(), cacheFileName + ".tmp");
                 long total = 0;
@@ -151,27 +171,21 @@ public class NetworkClient {
                     }
                     os.flush();
                 } catch (IOException e) {
-                    //noinspection ResultOfMethodCallIgnored
                     tmpFile.delete();
                     throw e;
                 }
-
                 if (cacheFile.exists() && !cacheFile.delete()) {
                     Log.w(TAG, "Не удалось удалить старый файл кэша перед заменой");
                 }
                 if (!tmpFile.renameTo(cacheFile)) {
-                    //noinspection ResultOfMethodCallIgnored
                     tmpFile.delete();
                     throw new IOException("Не удалось сохранить скачанный файл в кэш");
                 }
-
                 Log.d(TAG, "Сохранено из сети: " + cacheFile.length() + " байт (" + cacheFileName + ")");
                 return cacheFile;
             }
         } catch (Exception e) {
             if (!fallbackToAssetsOnError) {
-                // Для файла переносов офлайн-копии в assets нет смысла делать —
-                // это динамические данные, устаревший ассет хуже, чем их отсутствие.
                 if (e instanceof IOException) throw (IOException) e;
                 throw new IOException(e);
             }
@@ -183,7 +197,6 @@ public class NetworkClient {
         }
     }
 
-    /** Копирует assets/schedule.xlsx в кэш. null, если файла в assets нет. */
     private File copyFromAssets(String cacheFileName) {
         try (InputStream is = context.getAssets().open(ASSET_NAME)) {
             File cacheFile = new File(context.getCacheDir(), cacheFileName);
