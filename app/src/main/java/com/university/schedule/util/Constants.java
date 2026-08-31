@@ -30,6 +30,7 @@ public final class Constants {
     public static final String TRANSFERS_FILENAME_HINT = "perenos";
     public static final String TRANSFERS_CACHE_FILE_NAME = "transfers_cache.xlsx";
     public static final String PREF_TRANSFERS_LAST_UPDATED = "transfers_last_updated";
+    public static final String PREF_LAST_AUTO_REFRESH_ATTEMPT = "last_auto_refresh_attempt";
 
     public static final int SHEET_INDEX_GROUPS = 0;
     public static final int SHEET_INDEX_TEACHERS = 1;

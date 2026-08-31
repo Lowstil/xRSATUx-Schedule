@@ -15,12 +15,15 @@ import com.university.schedule.model.ScheduleItem;
 import com.university.schedule.model.SemesterInfo;
 import com.university.schedule.model.TransferItem;
 import com.university.schedule.model.WeekSchedule;
+import com.university.schedule.util.AppError;
+import com.university.schedule.widget.TodayScheduleWidgetProvider;
 import com.university.schedule.util.Constants;
 import com.university.schedule.util.DateUtils;
 import com.university.schedule.util.PrefsManager;
 import java.io.File;
 import java.io.FileInputStream;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -30,7 +33,9 @@ public class ScheduleRepository {
 
     public interface LoadCallback {
         void onSuccess();
-        void onError(String message);
+        /** message теперь классифицированная ошибка (см. AppError) — уже готовое
+         *  понятное сообщение для пользователя, а не текст исключения "как есть". */
+        void onError(AppError error);
         void onProgress(String message);
     }
 
@@ -113,11 +118,54 @@ public class ScheduleRepository {
             } catch (Exception e) {
                 Log.w(TAG, "Не удалось обновить переносы (расписание всё равно обновлено): " + e.getMessage());
             }
+            // Обновляем виджет на главном экране сразу после успешной загрузки —
+            // системный updatePeriodMillis (30 минут в widget_today_schedule_info.xml)
+            // это лишь подстраховка, реальное обновление виджета должно быть
+            // мгновенным после того, как расписание реально изменилось.
+            TodayScheduleWidgetProvider.updateAllWidgets(context);
             cb.onSuccess();
         } catch (Exception e) {
             Log.e(TAG, "Ошибка загрузки", e);
-            cb.onError(e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
+            cb.onError(AppError.from(e));
         }
+    }
+
+    /**
+     * Задача 5: проверяет, пора ли автоматически обновить расписание/переносы
+     * (раз в сутки, см. DateUtils.AUTO_REFRESH_INTERVAL_HOURS). Учитывает и
+     * успешные обновления (lastUpdated), и сами попытки (lastAutoRefreshAttempt) —
+     * второе нужно, чтобы при недоступном интернете приложение не пыталось
+     * стучаться на сервер при каждом запуске, а не только при успешных
+     * обновлениях.
+     */
+    public boolean shouldAutoRefresh() {
+        LocalDateTime lastSuccess = DateUtils.parseIsoDateTime(prefsManager.getLastUpdated());
+        LocalDateTime lastAttempt = DateUtils.parseIsoDateTime(prefsManager.getLastAutoRefreshAttempt());
+        LocalDateTime mostRecent = latest(lastSuccess, lastAttempt);
+        return DateUtils.isAutoRefreshDue(mostRecent, LocalDateTime.now());
+    }
+
+    private static LocalDateTime latest(LocalDateTime a, LocalDateTime b) {
+        if (a == null) return b;
+        if (b == null) return a;
+        return a.isAfter(b) ? a : b;
+    }
+
+    /**
+     * Запускает автообновление в фоне, если shouldAutoRefresh() вернул true —
+     * иначе просто вызывает cb.onSuccess() без сетевого запроса (ничего
+     * обновлять не требуется, UI может продолжать как обычно). Момент
+     * попытки фиксируется ДО результата — если сети нет, следующая попытка
+     * будет не раньше чем через сутки, а не при каждом следующем запуске.
+     * Вызывать из фонового потока, не из UI.
+     */
+    public void maybeAutoRefresh(LoadCallback cb) {
+        if (!shouldAutoRefresh()) {
+            cb.onSuccess();
+            return;
+        }
+        prefsManager.saveLastAutoRefreshAttempt(DateUtils.nowIsoDateTime());
+        loadScheduleFromNetwork(cb);
     }
 
     public void parseAndSave(File xlsx, LoadCallback cb) throws Exception {
@@ -298,7 +346,7 @@ public class ScheduleRepository {
 
     private static final LoadCallback NOOP = new LoadCallback() {
         @Override public void onSuccess() { }
-        @Override public void onError(String message) { }
+        @Override public void onError(AppError error) { }
         @Override public void onProgress(String message) { }
     };
 }

@@ -16,6 +16,7 @@ import com.university.schedule.R;
 import com.university.schedule.data.ScheduleRepository;
 import com.university.schedule.model.GroupOrTeacher;
 import com.university.schedule.ui.adapter.SelectionAdapter;
+import com.university.schedule.util.AppError;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -81,7 +82,7 @@ public class SelectionActivity extends AppCompatActivity implements SelectionAda
         tvEmpty.setVisibility(View.GONE);
         ex.execute(() -> repo.loadScheduleFromNetwork(new ScheduleRepository.LoadCallback() {
             @Override public void onSuccess() { runOnUiThread(() -> { progressBar.setVisibility(View.GONE); tvStatus.setVisibility(View.GONE); loadList(); }); }
-            @Override public void onError(String m) { runOnUiThread(() -> { progressBar.setVisibility(View.GONE); tvStatus.setText("Ошибка: " + m); loadList(); }); }
+            @Override public void onError(AppError error) { runOnUiThread(() -> { progressBar.setVisibility(View.GONE); tvStatus.setText(error.userMessage); loadList(); }); }
             @Override public void onProgress(String m) { runOnUiThread(() -> tvStatus.setText(m)); }
         }));
     }

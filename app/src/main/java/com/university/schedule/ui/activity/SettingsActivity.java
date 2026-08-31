@@ -15,6 +15,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.university.schedule.R;
 import com.university.schedule.data.ScheduleRepository;
 import com.university.schedule.logic.SemesterManager;
+import com.university.schedule.util.AppError;
 import com.university.schedule.util.DateUtils;
 import com.university.schedule.util.ThemeManager;
 
@@ -124,7 +125,7 @@ public class SettingsActivity extends AppCompatActivity {
         btnRefresh.setEnabled(false); btnRefresh.setText(R.string.settings_refresh);
         ex.execute(() -> repo.loadScheduleFromNetwork(new ScheduleRepository.LoadCallback() {
             @Override public void onSuccess() { runOnUiThread(() -> { btnRefresh.setEnabled(true); btnRefresh.setText(R.string.settings_refresh); updateInfo(); Toast.makeText(SettingsActivity.this, "Расписание обновлено", Toast.LENGTH_SHORT).show(); }); }
-            @Override public void onError(String m) { runOnUiThread(() -> { btnRefresh.setEnabled(true); btnRefresh.setText(R.string.settings_refresh); Toast.makeText(SettingsActivity.this, "Ошибка: " + m, Toast.LENGTH_LONG).show(); }); }
+            @Override public void onError(AppError error) { runOnUiThread(() -> { btnRefresh.setEnabled(true); btnRefresh.setText(R.string.settings_refresh); Toast.makeText(SettingsActivity.this, error.userMessage, Toast.LENGTH_LONG).show(); }); }
             @Override public void onProgress(String m) { }
         }));
     }

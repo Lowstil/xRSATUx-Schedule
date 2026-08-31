@@ -58,6 +58,22 @@ public class PrefsManager {
         return prefs.getString(Constants.PREF_TRANSFERS_LAST_UPDATED, null);
     }
 
+    /**
+     * Задача 5: отдельно от lastUpdated (который фиксируется только при
+     * УСПЕШНОМ обновлении) — отметка "когда в последний раз ВООБЩЕ пытались
+     * автообновиться", включая неудачные попытки. Нужна, чтобы при
+     * недоступном интернете приложение не пыталось долбиться на сервер
+     * при каждом запуске — минимум раз в сутки достаточно, успех это был
+     * или нет.
+     */
+    public void saveLastAutoRefreshAttempt(String iso) {
+        prefs.edit().putString(Constants.PREF_LAST_AUTO_REFRESH_ATTEMPT, iso).apply();
+    }
+
+    public String getLastAutoRefreshAttempt() {
+        return prefs.getString(Constants.PREF_LAST_AUTO_REFRESH_ATTEMPT, null);
+    }
+
     public void clearAll() { prefs.edit().clear().apply(); }
 
     /**

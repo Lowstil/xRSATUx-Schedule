@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Расписание РГАТУ</string>
+    <string name="widget_description">Расписание на сегодня без открытия приложения</string>
     <string name="splash_subtitle">Расписание занятий</string>
     <string name="selection_title">Выберите группу или преподавателя</string>
     <string name="toggle_groups">Группы</string>
@@ -10,6 +11,7 @@
     <string name="prev_week">Предыдущая неделя</string>
     <string name="next_week">Следующая неделя</string>
     <string name="no_lessons">Нет занятий</string>
+    <string name="refresh_now">Обновить</string>
     <string name="online_badge">онлайн</string>
     <string name="settings_current_selection">Текущий выбор</string>
     <string name="settings_change_selection">Изменить</string>
