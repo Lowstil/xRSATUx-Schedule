@@ -25,12 +25,12 @@
     <color name="badge_exam">#EF5350</color>
     <color name="badge_default">#8A8E9E</color>
 
-    <color name="state_current_bg">#3A2A1D</color>
-    <color name="state_current_accent">#FFA726</color>
-    <color name="state_current_text">#FFCC80</color>
-    <color name="state_next_bg">#1B332E</color>
-    <color name="state_next_accent">#4DB6AC</color>
-    <color name="state_next_text">#80CBC4</color>
+    <color name="state_current_bg">#1B2E1C</color>
+    <color name="state_current_accent">#81C784</color>
+    <color name="state_current_text">#A5D6A7</color>
+    <color name="state_next_bg">#1A2744</color>
+    <color name="state_next_accent">#64B5F6</color>
+    <color name="state_next_text">#BBDEFB</color>
 
     <color name="progress_track">#2E3350</color>
 

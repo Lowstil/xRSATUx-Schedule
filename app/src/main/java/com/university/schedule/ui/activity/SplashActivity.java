@@ -8,6 +8,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.university.schedule.R;
 import com.university.schedule.data.ScheduleRepository;
 import com.university.schedule.util.AppError;
+import com.university.schedule.util.EdgeToEdgeCompat;
 import com.university.schedule.util.PrefsManager;
 
 import java.util.concurrent.ExecutorService;
@@ -40,6 +41,7 @@ public class SplashActivity extends AppCompatActivity {
     protected void onCreate(Bundle s) {
         super.onCreate(s);
         setContentView(R.layout.activity_splash);
+        EdgeToEdgeCompat.applyEdgeToEdgeInsets(this);
         ex.execute(this::resolveDestination);
     }
 

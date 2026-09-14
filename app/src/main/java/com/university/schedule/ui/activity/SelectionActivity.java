@@ -17,6 +17,7 @@ import com.university.schedule.data.ScheduleRepository;
 import com.university.schedule.model.GroupOrTeacher;
 import com.university.schedule.ui.adapter.SelectionAdapter;
 import com.university.schedule.util.AppError;
+import com.university.schedule.util.EdgeToEdgeCompat;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -42,6 +43,7 @@ public class SelectionActivity extends AppCompatActivity implements SelectionAda
     protected void onCreate(Bundle s) {
         super.onCreate(s);
         setContentView(R.layout.activity_selection);
+        EdgeToEdgeCompat.applyEdgeToEdgeInsets(this);
         repo = ScheduleRepository.getInstance(this);
         currentName = repo.getSelectionName();
         currentType = repo.getSelectionType();

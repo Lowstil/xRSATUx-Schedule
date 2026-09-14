@@ -17,6 +17,7 @@ import com.university.schedule.data.ScheduleRepository;
 import com.university.schedule.logic.SemesterManager;
 import com.university.schedule.util.AppError;
 import com.university.schedule.util.DateUtils;
+import com.university.schedule.util.EdgeToEdgeCompat;
 import com.university.schedule.util.ThemeManager;
 
 import java.time.LocalDate;
@@ -37,6 +38,7 @@ public class SettingsActivity extends AppCompatActivity {
     protected void onCreate(Bundle s) {
         super.onCreate(s);
         setContentView(R.layout.activity_settings);
+        EdgeToEdgeCompat.applyEdgeToEdgeInsets(this);
         repo = ScheduleRepository.getInstance(this);
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
