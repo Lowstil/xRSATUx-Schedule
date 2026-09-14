@@ -105,7 +105,16 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
         h.tvLessonType.setVisibility(code.isEmpty() ? View.GONE : View.VISIBLE);
         h.tvLessonType.setBackground(tintedRound(ctx, tc, boxAlpha, 8));
         h.tvLessonType.setTextColor(tc);
-        setOrHide(h.tvTeacher, it.getTeacherName());
+        // Для преподавателей: показываем группу вместо имени преподавателя (им и так известно своё имя)
+        // Для групп: показываем имя преподавателя как обычно
+        if ("teacher".equals(it.getSource()) && it.getGroupName() != null && !it.getGroupName().trim().isEmpty()) {
+            setOrHide(h.tvTeacher, it.getGroupName());
+            h.tvGroups.setVisibility(View.GONE);
+        } else {
+            setOrHide(h.tvTeacher, it.getTeacherName());
+            // Для вида группы скрываем поле groups, т.к. группа уже в заголовке экрана
+            h.tvGroups.setVisibility(View.GONE);
+        }
         RoomFormatter.RoomInfo ri = RoomFormatter.parse(it.getRoom(), dark);
         if (ri == null) {
             h.roomChip.setVisibility(View.GONE);
@@ -123,16 +132,6 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
             }
         }
         h.tvOnline.setVisibility(it.isOnline() ? View.VISIBLE : View.GONE);
-        // Если это вид преподавателя (источник "teacher"), покажем группу под именем преподавателя
-        String groupName = it.getGroupName();
-        Log.d("DayScheduleAdapter", "Lesson " + pos + ": source=" + it.getSource() + ", groupName='" + groupName + "'");
-        if ("teacher".equals(it.getSource()) && groupName != null && !groupName.trim().isEmpty()) {
-            h.tvGroups.setText(groupName);
-            h.tvGroups.setVisibility(View.VISIBLE);
-        } else {
-            // Для вида группы скрываем поле groups, т.к. группа уже в заголовке экрана
-            h.tvGroups.setVisibility(View.GONE);
-        }
         String spec = it.getWeekSpec();
         if (spec != null && !spec.isEmpty() && !"1-18".equals(spec)) {
             h.tvWeekRange.setText("недели " + spec);
