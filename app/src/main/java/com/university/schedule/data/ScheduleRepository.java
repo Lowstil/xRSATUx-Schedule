@@ -257,14 +257,37 @@ if (dow == 0) continue; // воскресенье — всегда выходн�
 int week = weekCalculator.getWeekNumber(date);
 if (week < 1) continue; // вне семестра
 String wt = weekCalculator.getWeekTypeForDate(date);
-List<ScheduleItem> items = group
-? scheduleDao.getScheduleForGroup(name, wt)
-: scheduleDao.getScheduleForTeacher(name, wt);
+// Получаем расписание для ОБОИХ типов недель (на случай если пара есть только на одной из недель)
+List<ScheduleItem> itemsOdd = group
+? scheduleDao.getScheduleForGroup(name, "odd")
+: scheduleDao.getScheduleForTeacher(name, "odd");
+List<ScheduleItem> itemsEven = group
+? scheduleDao.getScheduleForGroup(name, "even")
+: scheduleDao.getScheduleForTeacher(name, "even");
+// Объединяем списки, убирая дубликаты (пары с weekSpec=ALL или совпадающие)
+List<ScheduleItem> items = new ArrayList<>();
+if (itemsOdd != null) items.addAll(itemsOdd);
+if (itemsEven != null) {
+for (ScheduleItem it : itemsEven) {
+boolean exists = false;
+for (ScheduleItem existing : items) {
+if (existing.getDayOfWeek() == it.getDayOfWeek()
+&& existing.getLessonNumber() == it.getLessonNumber()
+&& existing.getSubjectName().equals(it.getSubjectName())) {
+exists = true; break;
+}
+}
+if (!exists) items.add(it);
+}
+}
 List<TransferItem> transfers = transferDao.getForDate(date.toString());
 DaySchedule day = scheduleFilter.buildDaySchedule(items, dow, week, wt, date, transfers, name, group);
-if (day.isDayOff() || !day.hasLessons()) continue;
+if (day.isDayOff()) continue; // праздничный выходной
+// Проверяем наличие занятий: учитываем как обычные пары, так и добавленные переносом
+List<ScheduleItem> lessons = day.getLessons();
+if (lessons == null || lessons.isEmpty()) continue;
 String[][] times = Constants.getLessonTimes(dow);
-for (ScheduleItem it : day.getLessons()) {
+for (ScheduleItem it : lessons) {
 if (it.isCancelled()) continue; // отменено переносом
 int n = it.getLessonNumber();
 if (n < 1 || n > times.length) continue;
