@@ -233,11 +233,13 @@ displayDay();
 }
 private void displayDay() {
 if (currentWeek == null || currentWeek.getDays().isEmpty()) {
-adapter.updateData(new ArrayList<>()); tvEmpty.setVisibility(View.VISIBLE); tvEmpty.setText("Нет данных");
+adapter.updateData(new ArrayList<>()); 
+tvEmpty.setVisibility(View.VISIBLE); 
+tvEmpty.setText("Нет данных");
 selectedDayDate = null;
 currentDayEmpty = true;
 adapter.applyClock(null, null, null); // Сброс подсветки
-updateClock();
+updateNextLessonPanel(null); // Скрыть панель следующей пары
 return;
 }
 DaySchedule day = currentWeek.getDays().get(dayIndex);
@@ -248,15 +250,19 @@ if (day.isDayOff()) {
     tvEmpty.setVisibility(View.VISIBLE); 
     tvEmpty.setText(day.getHolidayName() != null ? day.getHolidayName() : "Выходной день"); 
     adapter.applyClock(selectedDayDate, null, null); // Сброс подсветки для выходного
+    updateNextLessonPanel(null); // Скрыть панель следующей пары для выходного
 }
 else if (!day.hasLessons()) { 
+    adapter.updateData(new ArrayList<>()); 
     tvEmpty.setVisibility(View.VISIBLE); 
     tvEmpty.setText("Нет занятий"); 
     adapter.applyClock(selectedDayDate, null, null); // Сброс подсветки для пустого дня
+    updateNextLessonPanel(null); // Скрыть панель следующей пары для дня без пар
 }
 else { 
     tvEmpty.setVisibility(View.GONE); 
     adapter.updateData(day.getLessons()); 
+    updateNextLessonPanel(repo.findNextLesson(selName, GroupOrTeacher.TYPE_GROUP.equals(selType), DateUtils.todayMoscow(), DateUtils.nowTimeMoscow(), 8));
 }
 // Панель следующей пары показывается только в дни без занятий (выходные, праздники)
 updateClock();
