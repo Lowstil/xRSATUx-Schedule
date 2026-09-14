@@ -268,11 +268,15 @@ adapter.applyClock(selectedDayDate, st.current, nextKey);
 updateNextLessonPanel(next);
 }
 /**
-Показывает карточку «Следующая пара» всегда — независимо от того,
-есть ли сегодня занятия или нет. Если следующая пара найдена, она
-отображается (это может быть любая пара любого будущего дня).
+Показывает карточку «Следующая пара» только в дни без занятий
+(выходные, праздники, каникулы). Если сегодня есть пары — панель скрыта.
 */
 private void updateNextLessonPanel(NextLesson next) {
+if (!currentDayEmpty) {
+// Сегодня есть занятия — скрываем панель следующей пары
+nextLessonPanel.setVisibility(View.GONE);
+return;
+}
 if (next == null) {
 nextLessonPanel.setVisibility(View.GONE);
 return;
