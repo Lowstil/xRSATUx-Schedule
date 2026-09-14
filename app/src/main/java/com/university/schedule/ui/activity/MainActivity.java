@@ -260,7 +260,11 @@ boolean isGroup = GroupOrTeacher.TYPE_GROUP.equals(selType);
 // Это может быть любая пара любого дня вперёд — не обязательно 1-я пара дня.
 NextLesson next = repo.findNextLesson(selName, isGroup,
 DateUtils.todayMoscow(), DateUtils.nowTimeMoscow(), 8);
-    adapter.applyClock(selectedDayDate, st.current, st.next);
+ScheduleClock.LessonKey nextKey = null;
+if (next != null) {
+    nextKey = new ScheduleClock.LessonKey(next.getDayOfWeek(), next.getLessonNumber(), next.getDate());
+}
+adapter.applyClock(selectedDayDate, st.current, nextKey);
 updateNextLessonPanel(next);
 }
 /**
