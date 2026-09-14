@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Большинство стилей наследуются из values/themes.xml (parent теперь
+         DayNight, поэтому он общий) — здесь переопределяется только то, что
+         реально отличается для тёмного режима: сплэш-фон и статус-бар. -->
+    <style name="Theme.UniSchedule.Splash" parent="Theme.UniSchedule">
+        <item name="android:windowBackground">@drawable/bg_splash_gradient</item>
+        <item name="android:statusBarColor">@color/primary_dark</item>
+    </style>
+</resources>

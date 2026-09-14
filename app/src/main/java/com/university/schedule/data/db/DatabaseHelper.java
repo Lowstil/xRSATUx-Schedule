@@ -35,6 +35,8 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         db.execSQL(ScheduleContract.SQL_CREATE_INDEX_GROUP);
         db.execSQL(ScheduleContract.SQL_CREATE_INDEX_TEACHER);
         db.execSQL(ScheduleContract.SQL_CREATE_HOLIDAYS);
+        db.execSQL(ScheduleContract.SQL_CREATE_TRANSFERS);
+        db.execSQL(ScheduleContract.SQL_CREATE_INDEX_TRANSFERS);
     }
 
     @Override
@@ -43,6 +45,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         db.execSQL(ScheduleContract.SQL_DELETE_SCHEDULE);
         db.execSQL(ScheduleContract.SQL_DELETE_USER_SETTINGS);
         db.execSQL(ScheduleContract.SQL_DELETE_HOLIDAYS);
+        db.execSQL(ScheduleContract.SQL_DELETE_TRANSFERS);
         onCreate(db);
     }
 

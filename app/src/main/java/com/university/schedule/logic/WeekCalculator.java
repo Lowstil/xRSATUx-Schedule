@@ -1,6 +1,7 @@
 package com.university.schedule.logic;
 
 import com.university.schedule.model.SemesterInfo;
+import com.university.schedule.util.DateUtils;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -60,10 +61,10 @@ public class WeekCalculator {
     }
 
     public int getCurrentWeekNumber() {
-        return getWeekNumber(LocalDate.now());
+        return getWeekNumber(DateUtils.todayMoscow());
     }
 
     public String getCurrentWeekType() {
-        return getWeekTypeForDate(LocalDate.now());
+        return getWeekTypeForDate(DateUtils.todayMoscow());
     }
 }
