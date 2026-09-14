@@ -17,7 +17,39 @@ public final class ScheduleContract {
     }
 
     public static final String DATABASE_NAME = "unischedule.db";
-    public static final int DATABASE_VERSION = 1;
+    public static final int DATABASE_VERSION = 2; // v2: добавлена таблица transfers (переносы занятий)
+
+    /**
+     * Переносы занятий (лист "Переносы" в отдельном xlsx-файле). В отличие от
+     * schedule (повторяющееся расписание по чётности недели), перенос — это
+     * разовое событие, привязанное к КОНКРЕТНОЙ календарной дате, а не к дню
+     * недели + чётности. Поэтому источник/дата пропуска и дата/время
+     * проведения хранятся как обычные даты ISO ("2026-02-09"), а не как
+     * day_of_week/week_type.
+     *
+     * Одна строка листа "Переносы" может порождать до двух записей здесь:
+     * - "removal" — пометка, что исходное занятие в старую дату/пару НЕ проводится;
+     * - "addition" — новое занятие в новую дату/пару (может быть пустым,
+     *   если это просто отмена без переноса — на практике в файле такого нет,
+     *   но парсер это допускает).
+     * Дополнительно из листа "Аудитории" загружаются chunk'и с kind="room_change" —
+     * тот же день/пара, только меняется аудитория (и, возможно, преподаватель).
+     */
+    public static final class TransferEntry implements BaseColumns {
+        public static final String TABLE_NAME = "transfers";
+        public static final String COLUMN_KIND = "kind";                 // "removal" | "addition" | "room_change"
+        public static final String COLUMN_DATE = "date";                 // ISO "2026-02-09"
+        public static final String COLUMN_LESSON_NUMBER = "lesson_number"; // 1..7
+        public static final String COLUMN_GROUP_NAME = "group_name";     // может содержать несколько групп через пробел
+        public static final String COLUMN_SUBJECT_NAME = "subject_name";
+        public static final String COLUMN_TEACHER_NAME = "teacher_name"; // основной преподаватель по журналу
+        public static final String COLUMN_SUBSTITUTE_TEACHER = "substitute_teacher"; // заменяющий, если есть
+        public static final String COLUMN_ROOM = "room";
+        public static final String COLUMN_LINK_ID = "link_id";           // связывает removal+addition одной строки листа
+        public static final String COLUMN_NOTE = "note";                 // например "Перенос из 1-210"
+
+        public static final String INDEX_DATE_GROUP = "idx_transfers_date_group";
+    }
 
     public static final class UserSettingsEntry implements BaseColumns {
         public static final String TABLE_NAME = "user_settings";
@@ -96,10 +128,30 @@ public final class ScheduleContract {
                     HolidayEntry.COLUMN_YEAR + " INTEGER NOT NULL DEFAULT 0, " +
                     HolidayEntry.COLUMN_NAME + " TEXT NOT NULL)";
 
+    public static final String SQL_CREATE_TRANSFERS =
+            "CREATE TABLE " + TransferEntry.TABLE_NAME + " (" +
+                    TransferEntry._ID + " INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                    TransferEntry.COLUMN_KIND + " TEXT NOT NULL, " +
+                    TransferEntry.COLUMN_DATE + " TEXT NOT NULL, " +
+                    TransferEntry.COLUMN_LESSON_NUMBER + " INTEGER NOT NULL, " +
+                    TransferEntry.COLUMN_GROUP_NAME + " TEXT, " +
+                    TransferEntry.COLUMN_SUBJECT_NAME + " TEXT, " +
+                    TransferEntry.COLUMN_TEACHER_NAME + " TEXT, " +
+                    TransferEntry.COLUMN_SUBSTITUTE_TEACHER + " TEXT, " +
+                    TransferEntry.COLUMN_ROOM + " TEXT, " +
+                    TransferEntry.COLUMN_LINK_ID + " INTEGER, " +
+                    TransferEntry.COLUMN_NOTE + " TEXT)";
+
+    public static final String SQL_CREATE_INDEX_TRANSFERS =
+            "CREATE INDEX " + TransferEntry.INDEX_DATE_GROUP + " ON " + TransferEntry.TABLE_NAME +
+                    "(" + TransferEntry.COLUMN_DATE + ", " + TransferEntry.COLUMN_GROUP_NAME + ")";
+
     public static final String SQL_DELETE_USER_SETTINGS =
             "DROP TABLE IF EXISTS " + UserSettingsEntry.TABLE_NAME;
     public static final String SQL_DELETE_SCHEDULE =
             "DROP TABLE IF EXISTS " + ScheduleEntry.TABLE_NAME;
     public static final String SQL_DELETE_HOLIDAYS =
             "DROP TABLE IF EXISTS " + HolidayEntry.TABLE_NAME;
+    public static final String SQL_DELETE_TRANSFERS =
+            "DROP TABLE IF EXISTS " + TransferEntry.TABLE_NAME;
 }

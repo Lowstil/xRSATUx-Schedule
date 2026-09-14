@@ -22,6 +22,28 @@ public class ScheduleItem {
     private String weekSpec;       // нормализованный список недель или ""
     private String source;         // "group" или "teacher"
 
+    // --- поля переносов/замен (заполняются на этапе слияния в ScheduleFilter,
+    // НЕ хранятся в таблице schedule — исходный ScheduleItem из БД их не имеет) ---
+    private boolean cancelled;     // true = занятие отменено переносом (показывать зачёркнутым/скрыто)
+    private boolean movedIn;       // true = занятие добавлено переносом (пары изначально не было)
+    private boolean roomChanged;   // true = аудитория изменена переносом (исходная room затёрта новой)
+    private String transferNote;   // например "Перенесено с 09.02.2026, 3 пара" или "Замена: Иванов И.И."
+
+    public boolean isCancelled() { return cancelled; }
+    public void setCancelled(boolean cancelled) { this.cancelled = cancelled; }
+
+    public boolean isMovedIn() { return movedIn; }
+    public void setMovedIn(boolean movedIn) { this.movedIn = movedIn; }
+
+    public boolean isRoomChanged() { return roomChanged; }
+    public void setRoomChanged(boolean roomChanged) { this.roomChanged = roomChanged; }
+
+    public String getTransferNote() { return transferNote; }
+    public void setTransferNote(String transferNote) { this.transferNote = transferNote; }
+
+    /** Любой вид переноса/замены — удобный флаг для UI (бейдж/подсветка). */
+    public boolean isTransferred() { return movedIn || roomChanged || (transferNote != null && !transferNote.isEmpty()); }
+
     public ScheduleItem() {
         this.weekSpec = "";
     }

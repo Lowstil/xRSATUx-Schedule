@@ -1,11 +1,9 @@
 package com.university.schedule.data;
 
 import android.util.Log;
-
 import com.university.schedule.data.db.ScheduleDao;
 import com.university.schedule.model.ScheduleItem;
 import com.university.schedule.util.Constants;
-
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.Row;
@@ -13,6 +11,7 @@ import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -22,47 +21,32 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Парсер .xlsx расписания.
- *
- * ГЛАВНОЕ: в файле ячейки "Неделя" (кол.0) и "День" (кол.1) ОБЪЕДИНЕНЫ
- * на много строк (merged cells). Apache POI отдаёт значение объединённой
- * ячейки только в её верхней строке, в остальных возвращает пустоту.
- * Поэтому здесь используется carry-over: запоминаем последнюю непустую
- * неделю и день и применяем их ко всем строкам ниже, пока не встретим новые.
- * Без этого в базу попадала бы одна строка на блок ("только 1 пара").
- */
 public class ExcelParser {
-
     private static final String TAG = "ExcelParser";
-
     private static final Pattern WEEK_PATTERN =
             Pattern.compile("\\(Недели?\\s*([^)]+)\\)", Pattern.CASE_INSENSITIVE);
-
     private static final Pattern TYPE_PATTERN =
             Pattern.compile("(?<![\\p{L}0-9])(оЛ|оП|ЛР|Экзамен|Л|П)(?![\\p{L}0-9])");
-
     private static final Pattern GROUP_TOKEN =
-            Pattern.compile("^[A-Za-zА-ЯЁ][A-Za-zА-ЯЁ0-9()]*-\\d+[A-Za-zА-ЯЁ0-9().-]*$");
-
+            Pattern.compile("^[A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё0-9()]*-\\d+[A-Za-zА-Яа-яЁё0-9().-]*$");
     private static final Pattern ROOM_TOKEN =
             Pattern.compile("^[А-ЯЁA-Za-z]?\\d+-\\d+([а-яА-ЯёЁ])?$|^[А-ЯЁA-Za-z]+-\\d+(-\\d+)*([а-яА-ЯёЁ])?$");
-
     private static final Pattern INITIALS =
             Pattern.compile("^[А-ЯЁA-Z]\\.([А-ЯЁA-Z]\\.)?$");
-
     private static final Pattern NAME_WORD =
             Pattern.compile("^[А-ЯЁA-Z][а-яёa-z]{1,}$");
-
+    
     private static final Set<String> ROOM_TWO_WORDS = new HashSet<>(
             Arrays.asList("Большой спортзал", "Точка кипения"));
-
+    // ВАЖНО: "saby" добавлено сюда для распознавания платформы Saby как аудитории.
     private static final Set<String> ROOM_ONE_WORD = new HashSet<>(
-            Arrays.asList("онлайн", "предприятия"));
-
+            Arrays.asList("онлайн", "предприятия", "saby"));
+            
     private static final String[] DAY_NAMES = {
             "Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"
     };
+
+    private static final long MAX_XLSX_SIZE_BYTES = 50L * 1024 * 1024; // 50 МБ
 
     public List<ScheduleItem> parseGroups(InputStream in) throws Exception {
         return parseSheet(in, Constants.SHEET_INDEX_GROUPS, ScheduleDao.SOURCE_GROUP);
@@ -74,7 +58,7 @@ public class ExcelParser {
 
     private List<ScheduleItem> parseSheet(InputStream in, int sheetIndex, String source) throws Exception {
         List<ScheduleItem> result = new ArrayList<>();
-        try (Workbook wb = new XSSFWorkbook(in)) {
+        try (Workbook wb = new XSSFWorkbook(new BoundedInputStream(in, MAX_XLSX_SIZE_BYTES))) {
             if (sheetIndex >= wb.getNumberOfSheets()) {
                 Log.w(TAG, "Лист #" + sheetIndex + " отсутствует (всего " + wb.getNumberOfSheets() + ")");
                 return result;
@@ -94,14 +78,11 @@ public class ExcelParser {
             Log.d(TAG, "Лист \"" + sheet.getSheetName() + "\": шапка в строке " + headerRowIdx
                     + ", всего строк " + (sheet.getLastRowNum() + 1));
 
-            // carry-over для объединённых ячеек "неделя" и "день"
             String currentWeekType = null;
             int currentDay = -1;
-
             for (int r = headerRowIdx + 1; r <= sheet.getLastRowNum(); r++) {
                 Row row = sheet.getRow(r);
                 if (row == null) continue;
-
                 String wtRaw = trim(getStr(row.getCell(0)));
                 if (!wtRaw.isEmpty()) {
                     String parsed = parseWeekType(wtRaw);
@@ -112,12 +93,11 @@ public class ExcelParser {
                     int d = parseDayOfWeek(dayRaw);
                     if (d >= 0) currentDay = d;
                 }
-
                 String lessonRaw = trim(getStr(row.getCell(2)));
-                if (lessonRaw.isEmpty()) continue;          // пустая строка-разделитель
+                if (lessonRaw.isEmpty()) continue;
                 int lesson = parseLessonNumber(lessonRaw);
-                if (lesson < 0) continue;                   // в колонке пары нет номера
-                if (currentWeekType == null || currentDay < 0) continue; // блок ещё не начался
+                if (lesson < 0) continue;
+                if (currentWeekType == null || currentDay < 0) continue;
 
                 int last = row.getLastCellNum();
                 for (int c = 3; c < last && c < headerLen; c++) {
@@ -125,7 +105,7 @@ public class ExcelParser {
                     if (colName == null || colName.isEmpty()) continue;
                     String cell = getStr(row.getCell(c));
                     if (cell == null) continue;
-                    for (String line : cell.split("\\r?\\n")) {
+                    for (String line : cell.split("\\r?\n")) {
                         ScheduleItem item = parseLine(line, currentWeekType, currentDay, lesson, colName, source);
                         if (item != null) result.add(item);
                     }
@@ -147,8 +127,8 @@ public class ExcelParser {
         return -1;
     }
 
-    private ScheduleItem parseLine(String raw, String weekType, int day, int lesson,
-                                   String colName, String source) {
+    ScheduleItem parseLine(String raw, String weekType, int day, int lesson,
+                           String colName, String source) {
         if (raw == null) return null;
         String line = raw.trim();
         if (line.isEmpty()) return null;
@@ -163,7 +143,7 @@ public class ExcelParser {
         Matcher tm = TYPE_PATTERN.matcher(line);
         int typeStart = -1, typeEnd = -1;
         String type = "";
-        while (tm.find()) {
+        if (tm.find()) {
             typeStart = tm.start();
             typeEnd = tm.end();
             type = tm.group(1);
@@ -202,6 +182,7 @@ public class ExcelParser {
         item.setRoom(room);
         item.setWeekSpec(weekSpec);
         item.setSource(source);
+
         if (ScheduleDao.SOURCE_GROUP.equals(source)) {
             item.setGroupName(colName);
         } else {
@@ -230,6 +211,19 @@ public class ExcelParser {
 
     private String peelRoom(List<String> tt) {
         if (tt.isEmpty()) return "";
+        
+        // 1. Специфические трёхсловные названия (партнёры/платформы)
+        if (tt.size() >= 3) {
+            String three = tt.get(tt.size() - 3) + " " + tt.get(tt.size() - 2) + " " + tt.get(tt.size() - 1);
+            if (three.equalsIgnoreCase("ООО НПО «Криста»") || three.equalsIgnoreCase("ООО НПО Криста")) {
+                tt.remove(tt.size() - 1);
+                tt.remove(tt.size() - 1);
+                tt.remove(tt.size() - 1);
+                return three;
+            }
+        }
+
+        // 2. Двухсловные аудитории
         if (tt.size() >= 2) {
             String two = tt.get(tt.size() - 2) + " " + tt.get(tt.size() - 1);
             if (ROOM_TWO_WORDS.contains(two)) {
@@ -238,6 +232,8 @@ public class ExcelParser {
                 return two;
             }
         }
+        
+        // 3. Однословные аудитории и стандартные токены (Г-417, 1-114 и т.д.)
         String last = tt.get(tt.size() - 1);
         if (ROOM_ONE_WORD.contains(last.toLowerCase()) || ROOM_TOKEN.matcher(last).matches()) {
             tt.remove(tt.size() - 1);
@@ -324,5 +320,44 @@ public class ExcelParser {
             return null;
         }
         return null;
+    }
+
+    private static final class BoundedInputStream extends InputStream {
+        private final InputStream delegate;
+        private final long maxBytes;
+        private long readSoFar;
+
+        BoundedInputStream(InputStream delegate, long maxBytes) {
+            this.delegate = delegate;
+            this.maxBytes = maxBytes;
+        }
+
+        @Override
+        public int read() throws IOException {
+            checkLimit(1);
+            int b = delegate.read();
+            if (b != -1) readSoFar++;
+            return b;
+        }
+
+        @Override
+        public int read(byte[] b, int off, int len) throws IOException {
+            checkLimit(len);
+            int n = delegate.read(b, off, len);
+            if (n > 0) readSoFar += n;
+            return n;
+        }
+
+        private void checkLimit(int about) throws IOException {
+            if (readSoFar + about > maxBytes) {
+                throw new IOException("Файл расписания превышает допустимый размер ("
+                        + maxBytes + " байт) — разбор остановлен");
+            }
+        }
+
+        @Override
+        public void close() throws IOException {
+            delegate.close();
+        }
     }
 }
