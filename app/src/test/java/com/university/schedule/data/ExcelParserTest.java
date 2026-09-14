@@ -117,5 +117,17 @@ public class ExcelParserTest {
                 "ИПБ-25-1 Основы программирования ЛР Г-512", "even", 2, 3,
                 "Шаров В.Г.", ScheduleDao.SOURCE_TEACHER);
         assertEquals("Шаров В.Г.", item.getTeacherName());
+        assertEquals("ИПБ-25-1", item.getGroupName());
+    }
+
+    @Test
+    public void parsesGroupFromFirstTokenOnTeacherSheet() {
+        // Проверяем, что группа распознаётся из первого токена ячейки на листе преподавателей
+        ScheduleItem item = parser.parseLine(
+                "ИВБ-24 Системное программное обеспечение Л Сизов П.В. Г-519", "odd", 1, 1,
+                "Иванов И.И.", ScheduleDao.SOURCE_TEACHER);
+        assertEquals("ИВБ-24", item.getGroupName());
+        assertEquals("Системное программное обеспечение", item.getSubjectName());
+        assertEquals("Иванов И.И.", item.getTeacherName());
     }
 }
