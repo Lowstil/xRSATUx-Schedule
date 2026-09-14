@@ -122,7 +122,13 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
             }
         }
         h.tvOnline.setVisibility(it.isOnline() ? View.VISIBLE : View.GONE);
-        setOrHide(h.tvGroups, it.getGroupName());
+        // Если это вид преподавателя (источник "teacher"), покажем группу под именем преподавателя
+        if ("teacher".equals(it.getSource())) {
+            setOrHide(h.tvGroups, it.getGroupName());
+        } else {
+            // Для вида группы скрываем поле groups, т.к. группа уже в заголовке экрана
+            h.tvGroups.setVisibility(View.GONE);
+        }
         String spec = it.getWeekSpec();
         if (spec != null && !spec.isEmpty() && !"1-18".equals(spec)) {
             h.tvWeekRange.setText("недели " + spec);
