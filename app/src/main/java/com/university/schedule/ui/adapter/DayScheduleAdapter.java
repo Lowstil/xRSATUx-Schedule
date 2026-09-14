@@ -111,6 +111,7 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
             setOrHide(h.tvTeacher, it.getGroupName());
             h.tvGroups.setVisibility(View.GONE);
         } else {
+            // Показываем имя преподавателя (для групп) или имя преподавателя из записи (если группа не найдена в ячейке)
             setOrHide(h.tvTeacher, it.getTeacherName());
             // Для вида группы скрываем поле groups, т.к. группа уже в заголовке экрана
             h.tvGroups.setVisibility(View.GONE);
