@@ -191,12 +191,17 @@ public class ExcelParser {
         item.setRoom(room);
         item.setWeekSpec(weekSpec);
         item.setSource(source);
-        item.setGroupName(groupName);
-
+        
+        // Для преподавателей: groupName уже установлен из первого токена, если он был распознан как группа
+        // Для групп: colName содержит название группы
         if (ScheduleDao.SOURCE_GROUP.equals(source)) {
             item.setGroupName(colName);
-        } else {
+        } else if (ScheduleDao.SOURCE_TEACHER.equals(source)) {
             item.setTeacherName(colName);
+            // Сохраняем группу, если она была распознана в первом токене
+            if (groupName != null && !groupName.trim().isEmpty()) {
+                item.setGroupName(groupName);
+            }
         }
         return item;
     }

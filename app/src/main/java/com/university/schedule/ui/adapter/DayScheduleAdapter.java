@@ -7,6 +7,7 @@ import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.Paint;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -123,8 +124,11 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
         }
         h.tvOnline.setVisibility(it.isOnline() ? View.VISIBLE : View.GONE);
         // Если это вид преподавателя (источник "teacher"), покажем группу под именем преподавателя
-        if ("teacher".equals(it.getSource())) {
-            setOrHide(h.tvGroups, it.getGroupName());
+        String groupName = it.getGroupName();
+        Log.d("DayScheduleAdapter", "Lesson " + pos + ": source=" + it.getSource() + ", groupName='" + groupName + "'");
+        if ("teacher".equals(it.getSource()) && groupName != null && !groupName.trim().isEmpty()) {
+            h.tvGroups.setText(groupName);
+            h.tvGroups.setVisibility(View.VISIBLE);
         } else {
             // Для вида группы скрываем поле groups, т.к. группа уже в заголовке экрана
             h.tvGroups.setVisibility(View.GONE);
