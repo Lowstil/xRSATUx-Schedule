@@ -236,7 +236,6 @@ if (currentWeek == null || currentWeek.getDays().isEmpty()) {
 adapter.updateData(new ArrayList<>()); tvEmpty.setVisibility(View.VISIBLE); tvEmpty.setText("Нет данных");
 selectedDayDate = null;
 currentDayEmpty = true;
-nextLessonPanel.setVisibility(View.GONE);
 updateClock();
 return;
 }
@@ -244,9 +243,9 @@ DaySchedule day = currentWeek.getDays().get(dayIndex);
 selectedDayDate = day.getDate();
 currentDayEmpty = day.isDayOff() || !day.hasLessons();
 if (day.isDayOff()) { adapter.updateData(new ArrayList<>()); tvEmpty.setVisibility(View.VISIBLE); tvEmpty.setText(day.getHolidayName() != null ? day.getHolidayName() : "Выходной день"); }
-else if (!day.hasLessons()) { adapter.updateData(new ArrayList<>()); tvEmpty.setVisibility(View.VISIBLE); tvEmpty.setText("Нет занятий"); }
+else if (!day.hasLessons()) { tvEmpty.setVisibility(View.VISIBLE); tvEmpty.setText("Нет занятий"); }
 else { tvEmpty.setVisibility(View.GONE); adapter.updateData(day.getLessons()); }
-nextLessonPanel.setVisibility(View.GONE);
+// Панель следующей пары теперь показывается всегда (в updateClock)
 updateClock();
 }
 /**
@@ -265,12 +264,12 @@ DateUtils.todayMoscow(), DateUtils.nowTimeMoscow(), 8);
 updateNextLessonPanel(next);
 }
 /**
-Показывает карточку «Следующая пара» на пустом дне (выходной / нет занятий).
-Если день содержит пары — карточка скрыта, подсветка «Следующая» в списке
-пар уже показывает ближайшую реальную пару.
+Показывает карточку «Следующая пара» всегда — независимо от того,
+есть ли сегодня занятия или нет. Если следующая пара найдена, она
+отображается (это может быть любая пара любого будущего дня).
 */
 private void updateNextLessonPanel(NextLesson next) {
-if (!currentDayEmpty || next == null) {
+if (next == null) {
 nextLessonPanel.setVisibility(View.GONE);
 return;
 }
