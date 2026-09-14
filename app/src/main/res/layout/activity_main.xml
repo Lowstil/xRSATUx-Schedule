@@ -177,9 +177,8 @@ android:text="@string/no_lessons"
 android:textColor="@color/text_secondary"
 android:textSize="18sp"
 android:visibility="gone" />
-<!-- Карточка «Следующая пара» — показывается на пустом дне
-(выходной / нет занятий), чтобы пользователь видел,
-когда ближайшая пара, без необходимости листать вперёд. -->
+<!-- Карточка «Следующая пара» — показывается всегда,
+чтобы пользователь видел ближайшую пару (любой день вперёд). -->
 <LinearLayout
 android:id="@+id/nextLessonPanel"
 android:layout_width="match_parent"
