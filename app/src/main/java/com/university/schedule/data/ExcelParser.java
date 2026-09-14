@@ -162,6 +162,15 @@ public class ExcelParser {
         List<String> tt = tokens(tail);
         String room = peelRoom(tt);
         String teacher;
+        // Для листа преподавателей: первый токен может быть группой (например "ИВТ-401")
+        String groupName = null;
+        if (ScheduleDao.SOURCE_TEACHER.equals(source) && !tt.isEmpty()) {
+            String firstToken = tt.get(0);
+            if (GROUP_TOKEN.matcher(firstToken).matches()) {
+                groupName = firstToken;
+                tt.remove(0);
+            }
+        }
         if (typeStart >= 0) {
             teacher = join(tt);
         } else {
@@ -182,6 +191,7 @@ public class ExcelParser {
         item.setRoom(room);
         item.setWeekSpec(weekSpec);
         item.setSource(source);
+        item.setGroupName(groupName);
 
         if (ScheduleDao.SOURCE_GROUP.equals(source)) {
             item.setGroupName(colName);
