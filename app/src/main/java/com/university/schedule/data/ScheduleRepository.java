@@ -237,7 +237,7 @@ return scheduleFilter.buildDaySchedule(items, dow, week, wt, today, transfers, n
 /**
 Задача: «Следующая пара» по реальному расписанию.
 Ищет ближайшее будущее занятие для группы/преподавателя, начиная с
-fromDate и времени после afterTime, просматривая до maxDays дней вперёд.
+текущего момента, просматривая до maxDays дней вперёд.
 В отличие от ScheduleClock (который считает по сетке звонков и всегда
 подставляет 1-ю пару дня), здесь ищем по реальному расписанию:
 Если сегодня суббота без пар, завтра воскресенье, а в понедельник
@@ -250,6 +250,8 @@ public NextLesson findNextLesson(String name, boolean group, LocalDate fromDate,
 LocalTime afterTime, int maxDays) {
 if (name == null || fromDate == null) return null;
 DateTimeFormatter tf = DateTimeFormatter.ofPattern("H:mm");
+// Начинаем поиск с текущего дня, но если сегодня выходной или нет пар,
+// то ищем в последующих днях
 for (int k = 0; k < maxDays; k++) {
 LocalDate date = fromDate.plusDays(k);
 int dow = DateUtils.toScheduleDayOfWeek(date);
@@ -292,8 +294,8 @@ if (it.isCancelled()) continue; // отменено переносом
 int n = it.getLessonNumber();
 if (n < 1 || n > times.length) continue;
 LocalTime start = LocalTime.parse(times[n - 1][0], tf);
-// Для сегодняшнего дня: пропускаем пары, которые уже начались
-// или закончились (они либо текущие, либо уже прошли).
+// Для сегодняшнего дня (k == 0): пропускаем пары, которые уже начались
+// Для будущих дней (k > 0): берём все пары без проверки времени
 if (k == 0 && afterTime != null && !afterTime.isBefore(start)) continue;
 NextLesson nl = new NextLesson();
 nl.setDate(date);
