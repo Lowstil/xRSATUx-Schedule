@@ -239,7 +239,7 @@ tvEmpty.setText("Нет данных");
 selectedDayDate = null;
 currentDayEmpty = true;
 adapter.applyClock(null, null, null); // Сброс подсветки
-updateNextLessonPanel(null); // Скрыть панель следующей пары
+// Не скрываем панель здесь, updateClock() решит что показывать
 return;
 }
 DaySchedule day = currentWeek.getDays().get(dayIndex);
@@ -250,19 +250,19 @@ if (day.isDayOff()) {
     tvEmpty.setVisibility(View.VISIBLE); 
     tvEmpty.setText(day.getHolidayName() != null ? day.getHolidayName() : "Выходной день"); 
     adapter.applyClock(selectedDayDate, null, null); // Сброс подсветки для выходного
-    updateNextLessonPanel(null); // Скрыть панель следующей пары для выходного
+    // Не скрываем панель здесь, updateClock() решит что показывать
 }
 else if (!day.hasLessons()) { 
     adapter.updateData(new ArrayList<>()); 
     tvEmpty.setVisibility(View.VISIBLE); 
     tvEmpty.setText("Нет занятий"); 
     adapter.applyClock(selectedDayDate, null, null); // Сброс подсветки для пустого дня
-    updateNextLessonPanel(null); // Скрыть панель следующей пары для дня без пар
+    // Не скрываем панель здесь, updateClock() решит что показывать
 }
 else { 
     tvEmpty.setVisibility(View.GONE); 
     adapter.updateData(day.getLessons()); 
-    updateNextLessonPanel(repo.findNextLesson(selName, GroupOrTeacher.TYPE_GROUP.equals(selType), DateUtils.todayMoscow(), DateUtils.nowTimeMoscow(), 8));
+    // Для дней с парами панель не нужна, updateClock() скроет её
 }
 // Панель следующей пары показывается только в дни без занятий (выходные, праздники)
 updateClock();
@@ -284,7 +284,8 @@ if (next != null) {
     nextKey = new ScheduleClock.LessonKey(next.getDayOfWeek(), next.getLessonNumber(), next.getDate());
 }
 adapter.applyClock(selectedDayDate, st.current, nextKey);
-updateNextLessonPanel(next);
+// Панель следующей пары показываем ТОЛЬКО если сегодня выходной/праздник/нет пар
+updateNextLessonPanel(currentDayEmpty ? next : null);
 }
 /**
 Показывает карточку «Следующая пара» только в дни без занятий
