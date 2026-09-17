@@ -197,10 +197,14 @@ public class ExcelParser {
         if (ScheduleDao.SOURCE_GROUP.equals(source)) {
             item.setGroupName(colName);
         } else if (ScheduleDao.SOURCE_TEACHER.equals(source)) {
-            item.setTeacherName(colName);
             // Сохраняем группу, если она была распознана в первом токене
             if (groupName != null && !groupName.trim().isEmpty()) {
                 item.setGroupName(groupName);
+            }
+            // Имя преподавателя берём из заголовка колонки только если группа не была найдена в ячейке
+            // (если группа найдена в ячейке, значит teacher уже содержит правильное значение из peelTeacherSuffix)
+            if (groupName == null || groupName.trim().isEmpty()) {
+                item.setTeacherName(colName);
             }
         }
         return item;
