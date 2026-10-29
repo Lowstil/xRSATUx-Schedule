@@ -37,6 +37,15 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         db.execSQL(ScheduleContract.SQL_CREATE_HOLIDAYS);
         db.execSQL(ScheduleContract.SQL_CREATE_TRANSFERS);
         db.execSQL(ScheduleContract.SQL_CREATE_INDEX_TRANSFERS);
+        db.execSQL(ScheduleContract.SQL_CREATE_NOTES);
+        db.execSQL(ScheduleContract.SQL_CREATE_INDEX_NOTES);
+    }
+
+    @Override
+    public void onOpen(SQLiteDatabase db) {
+        super.onOpen(db);
+        db.execSQL(ScheduleContract.SQL_CREATE_NOTES);
+        db.execSQL(ScheduleContract.SQL_CREATE_INDEX_NOTES);
     }
 
     @Override

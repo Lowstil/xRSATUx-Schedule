@@ -2,6 +2,8 @@ package com.university.schedule.data;
 import android.content.Context;
 import android.util.Log;
 import com.university.schedule.data.db.HolidayDao;
+import com.university.schedule.data.db.NoteDao;
+import com.university.schedule.model.LessonNote;
 import com.university.schedule.data.db.ScheduleDao;
 import com.university.schedule.data.db.TransferDao;
 import com.university.schedule.data.db.UserDao;
@@ -42,6 +44,7 @@ private final ScheduleDao scheduleDao;
 private final UserDao userDao;
 private final HolidayDao holidayDao;
 private final TransferDao transferDao;
+private final NoteDao noteDao;
 private final NetworkClient networkClient;
 private final ExcelParser excelParser;
 private final TransferParser transferParser;
@@ -63,6 +66,7 @@ this.scheduleDao = new ScheduleDao(this.context);
 this.userDao = new UserDao(this.context);
 this.holidayDao = new HolidayDao(this.context);
 this.transferDao = new TransferDao(this.context);
+this.noteDao = new NoteDao(this.context);
 this.networkClient = new NetworkClient(this.context);
 this.excelParser = new ExcelParser();
 this.transferParser = new TransferParser();
@@ -79,6 +83,9 @@ LocalDate rolled = SemesterManager.getDefaultSemesterStart();
 if (rolled != null && (start == null || isWithinSemester(rolled, today) || !isWithinSemester(start, today))) {
 start = rolled;
 prefsManager.saveSemesterStart(start);
+
+
+
 Log.d(TAG, "Начало семестра актуализировано: " + start);
 }
 }
@@ -111,6 +118,7 @@ prefsManager.saveTransfersLastUpdated(DateUtils.nowIsoDateTime());
 Log.w(TAG, "Не удалось обновить переносы (расписание всё равно обновлено): " + e.getMessage());
 }
 TodayScheduleWidgetProvider.updateAllWidgets(context);
+com.university.schedule.notification.ReminderScheduler.rescheduleAll(context);
 cb.onSuccess();
 } catch (Exception e) {
 Log.e(TAG, "Ошибка загрузки", e);
@@ -328,6 +336,10 @@ userDao.saveSelection(type, name, start);
 prefsManager.saveSelection(type, name);
 prefsManager.saveSemesterStart(start);
 }
+public void saveSelection(String type, String name) {
+saveUserSelection(type, name);
+}
+
 public UserDao.UserSettings getUserSettings() {
 return userDao.getSettings();
 }
@@ -341,7 +353,9 @@ public String getSelectionName() {
 return prefsManager.getSelectionName();
 }
 public void updateSemesterStart(LocalDate start) {
-prefsManager.saveSemesterStart(start);
+
+
+
 userDao.updateSemesterStart(start);
 refreshLogic();
 }
@@ -360,6 +374,15 @@ return prefsManager.getLastUpdated();
 }
 public String getTransfersLastUpdated() {
 return prefsManager.getTransfersLastUpdated();
+}
+public java.util.Map<Integer, LessonNote> getNotesForDate(String date) {
+return noteDao.getNotesForDate(date);
+}
+public void saveNote(String date, int lessonNum, String subject, String text, boolean completed) {
+noteDao.saveOrUpdate(date, lessonNum, subject, text, completed);
+}
+public void deleteNote(String date, int lessonNum) {
+noteDao.delete(date, lessonNum);
 }
 public void clearAllData() {
 scheduleDao.clearAll();

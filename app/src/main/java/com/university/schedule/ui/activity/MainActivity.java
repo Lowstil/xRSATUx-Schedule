@@ -1,15 +1,24 @@
 package com.university.schedule.ui.activity;
 
 import android.content.Intent;
+import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.CheckBox;
+import android.widget.EditText;
+import android.widget.HorizontalScrollView;
+import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.content.ContextCompat;
@@ -25,18 +34,24 @@ import com.university.schedule.data.ScheduleRepository;
 import com.university.schedule.logic.WeekCalculator;
 import com.university.schedule.model.DaySchedule;
 import com.university.schedule.model.GroupOrTeacher;
+import com.university.schedule.model.LessonNote;
 import com.university.schedule.model.NextLesson;
+import com.university.schedule.model.ScheduleItem;
 import com.university.schedule.model.WeekSchedule;
+import com.university.schedule.notification.ReminderScheduler;
 import com.university.schedule.ui.adapter.DayScheduleAdapter;
+import com.university.schedule.ui.dialog.BellScheduleDialog;
 import com.university.schedule.util.AppError;
 import com.university.schedule.util.Constants;
 import com.university.schedule.util.DateUtils;
 import com.university.schedule.util.EdgeToEdgeCompat;
+import com.university.schedule.util.FavoritesManager;
 import com.university.schedule.util.ScheduleClock;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -55,6 +70,8 @@ public class MainActivity extends AppCompatActivity {
     private View staleBanner;
     private View nextLessonPanel;
     private TextView tvNextWhen, tvNextSubject, tvNextTeacherRoom;
+    private HorizontalScrollView hsvFavorites;
+    private LinearLayout llFavorites;
 
     private DayScheduleAdapter adapter;
     private ScheduleRepository repo;
@@ -110,6 +127,8 @@ public class MainActivity extends AppCompatActivity {
         tvNextWhen = findViewById(R.id.tvNextWhen);
         tvNextSubject = findViewById(R.id.tvNextSubject);
         tvNextTeacherRoom = findViewById(R.id.tvNextTeacherRoom);
+        hsvFavorites = findViewById(R.id.hsvFavorites);
+        llFavorites = findViewById(R.id.llFavorites);
 
         staleBanner.setOnClickListener(v -> {
             swipeRefresh.setRefreshing(true);
@@ -129,26 +148,10 @@ public class MainActivity extends AppCompatActivity {
             btnSettings.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
         }
 
-        toolbarTitleArea.setOnClickListener(v -> {
-            boolean isGroup = GroupOrTeacher.TYPE_GROUP.equals(selType);
-            String title = isGroup ? "Выбрать другую группу?" : "Выбрать другого преподавателя?";
-            String message = isGroup
-                    ? "Текущая группа: " + (selName != null ? selName : "—") + "\nХотите выбрать другую группу?"
-                    : "Текущий преподаватель: " + (selName != null ? selName : "—") + "\nХотите выбрать другого преподавателя?";
-            new MaterialAlertDialogBuilder(this)
-                    .setTitle(title)
-                    .setMessage(message)
-                    .setPositiveButton("Выбрать", (dialog, which) -> {
-                        Intent i = new Intent(this, SelectionActivity.class);
-                        i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                        startActivity(i);
-                        finish();
-                    })
-                    .setNegativeButton("Отмена", null)
-                    .show();
-        });
+        toolbarTitleArea.setOnClickListener(v -> showSelectionDialog());
 
         adapter = new DayScheduleAdapter(new ArrayList<>());
+        adapter.setOnLessonClickListener(this::showLessonNoteDialog);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         recyclerView.setAdapter(adapter);
 
@@ -175,7 +178,156 @@ public class MainActivity extends AppCompatActivity {
         btnNext.setOnClickListener(v -> { if (weekNum < 18) { weekNum++; loadWeek(); } });
 
         updateLastUpdatedBanner();
+        updateFavoritesBar();
         loadWeek();
+    }
+
+    private void showSelectionDialog() {
+        boolean isGroup = GroupOrTeacher.TYPE_GROUP.equals(selType);
+        String title = isGroup ? "Выбрать другую группу?" : "Выбрать другого преподавателя?";
+        String message = isGroup
+                ? "Текущая группа: " + (selName != null ? selName : "—") + "\nХотите выбрать другую группу?"
+                : "Текущий преподаватель: " + (selName != null ? selName : "—") + "\nХотите выбрать другого преподавателя?";
+
+        new MaterialAlertDialogBuilder(this)
+                .setTitle(title)
+                .setMessage(message)
+                .setPositiveButton("Выбрать", (dialog, which) -> {
+                    Intent i = new Intent(this, SelectionActivity.class);
+                    i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                    startActivity(i);
+                    finish();
+                })
+                .setNegativeButton("Отмена", null)
+                .show();
+    }
+
+    private void updateFavoritesBar() {
+        if (llFavorites == null || hsvFavorites == null) return;
+        List<GroupOrTeacher> favs = FavoritesManager.getFavorites(this);
+        if (favs.isEmpty()) {
+            hsvFavorites.setVisibility(View.GONE);
+            return;
+        }
+
+        hsvFavorites.setVisibility(View.VISIBLE);
+        llFavorites.removeAllViews();
+
+        for (GroupOrTeacher fav : favs) {
+            TextView chip = new TextView(this);
+            boolean isSelected = fav.getName().equalsIgnoreCase(selName);
+
+            chip.setText("★ " + fav.getName());
+            chip.setTextSize(13);
+            chip.setPadding(dpToPx(12), dpToPx(5), dpToPx(12), dpToPx(5));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+            );
+            lp.setMarginEnd(dpToPx(8));
+            chip.setLayoutParams(lp);
+
+            GradientDrawable gd = new GradientDrawable();
+            gd.setCornerRadius(dpToPx(16));
+            if (isSelected) {
+                gd.setColor(Color.WHITE);
+                chip.setTextColor(ContextCompat.getColor(this, R.color.primary_dark));
+                chip.setTypeface(null, android.graphics.Typeface.BOLD);
+            } else {
+                gd.setColor(0x33FFFFFF);
+                chip.setTextColor(Color.WHITE);
+                chip.setTypeface(null, android.graphics.Typeface.NORMAL);
+            }
+            chip.setBackground(gd);
+
+            chip.setOnClickListener(v -> {
+                if (!fav.getName().equalsIgnoreCase(selName)) {
+                    selType = fav.getType();
+                    selName = fav.getName();
+                    repo.saveSelection(selType, selName);
+                    tvSelectionName.setText(selName);
+                    tvSelectionType.setText(fav.isGroup() ? "Группа" : "Преподаватель");
+                    loadWeek();
+                    updateFavoritesBar();
+                    ReminderScheduler.rescheduleAll(this);
+                }
+            });
+
+            llFavorites.addView(chip);
+        }
+
+        TextView btnAdd = new TextView(this);
+        btnAdd.setText("＋");
+        btnAdd.setTextSize(15);
+        btnAdd.setTextColor(Color.WHITE);
+        btnAdd.setPadding(dpToPx(10), dpToPx(4), dpToPx(10), dpToPx(4));
+        GradientDrawable addGd = new GradientDrawable();
+        addGd.setCornerRadius(dpToPx(16));
+        addGd.setColor(0x22FFFFFF);
+        btnAdd.setBackground(addGd);
+        btnAdd.setOnClickListener(v -> {
+            Intent i = new Intent(this, SelectionActivity.class);
+            startActivity(i);
+        });
+        llFavorites.addView(btnAdd);
+    }
+
+    private int dpToPx(int dp) {
+        return Math.round(dp * getResources().getDisplayMetrics().density);
+    }
+
+    private void showLessonNoteDialog(ScheduleItem item, LocalDate date, LessonNote existingNote) {
+        if (date == null) return;
+        View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_lesson_note, null);
+        TextView tvSubject = dialogView.findViewById(R.id.tvNoteDialogSubject);
+        TextView tvDetails = dialogView.findViewById(R.id.tvNoteDialogDetails);
+        EditText etNote = dialogView.findViewById(R.id.etNoteText);
+        CheckBox cbCompleted = dialogView.findViewById(R.id.cbNoteCompleted);
+        View btnDelete = dialogView.findViewById(R.id.btnDeleteNote);
+        View btnCancel = dialogView.findViewById(R.id.btnCancelNote);
+        View btnSave = dialogView.findViewById(R.id.btnSaveNote);
+
+        tvSubject.setText(item.getSubjectName());
+        String det = item.getLessonNumber() + " пара · " + DateUtils.formatDisplayDate(date);
+        if (item.getRoom() != null && !item.getRoom().isEmpty()) det += " · ауд. " + item.getRoom();
+        tvDetails.setText(det);
+
+        if (existingNote != null && existingNote.getNoteText() != null && !existingNote.getNoteText().isEmpty()) {
+            etNote.setText(existingNote.getNoteText());
+            cbCompleted.setChecked(existingNote.isCompleted());
+            cbCompleted.setVisibility(View.VISIBLE);
+            btnDelete.setVisibility(View.VISIBLE);
+        } else {
+            cbCompleted.setVisibility(View.GONE);
+            btnDelete.setVisibility(View.GONE);
+        }
+
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setView(dialogView)
+                .create();
+
+        btnCancel.setOnClickListener(v -> dialog.dismiss());
+
+        btnDelete.setOnClickListener(v -> {
+            repo.deleteNote(date.toString(), item.getLessonNumber());
+            adapter.setNotes(repo.getNotesForDate(date.toString()));
+            dialog.dismiss();
+            Toast.makeText(this, "Заметка удалена", Toast.LENGTH_SHORT).show();
+        });
+
+        btnSave.setOnClickListener(v -> {
+            String text = etNote.getText().toString().trim();
+            if (text.isEmpty()) {
+                repo.deleteNote(date.toString(), item.getLessonNumber());
+            } else {
+                repo.saveNote(date.toString(), item.getLessonNumber(), item.getSubjectName(), text, cbCompleted.isChecked());
+            }
+            adapter.setNotes(repo.getNotesForDate(date.toString()));
+            dialog.dismiss();
+            Toast.makeText(this, "Заметка сохранена", Toast.LENGTH_SHORT).show();
+        });
+
+        dialog.show();
     }
 
     private void initWeekForDate(LocalDate today) {
@@ -209,6 +361,7 @@ public class MainActivity extends AppCompatActivity {
             selectTodayTab();
             loadWeek();
         }
+        updateFavoritesBar();
         clockHandler.removeCallbacks(clockTick);
         clockHandler.post(clockTick);
         updateLastUpdatedBanner();
@@ -314,6 +467,7 @@ public class MainActivity extends AppCompatActivity {
     private void displayDay() {
         if (currentWeek == null || currentWeek.getDays().isEmpty()) {
             adapter.updateData(new ArrayList<>());
+            adapter.setNotes(new HashMap<>());
             tvEmpty.setVisibility(View.VISIBLE);
             tvEmpty.setText("Нет данных");
             selectedDayDate = null;
@@ -325,6 +479,12 @@ public class MainActivity extends AppCompatActivity {
         DaySchedule day = currentWeek.getDays().get(dayIndex);
         selectedDayDate = day.getDate();
         currentDayEmpty = day.isDayOff() || !day.hasLessons();
+
+        if (selectedDayDate != null) {
+            adapter.setNotes(repo.getNotesForDate(selectedDayDate.toString()));
+        } else {
+            adapter.setNotes(new HashMap<>());
+        }
 
         if (day.isDayOff()) {
             adapter.updateData(new ArrayList<>());
@@ -353,7 +513,7 @@ public class MainActivity extends AppCompatActivity {
         if (next != null) {
             nextKey = new ScheduleClock.LessonKey(next.getDayOfWeek(), next.getLessonNumber(), next.getDate());
         }
-        adapter.applyClock(selectedDayDate, st.current, nextKey);
+        adapter.applyClock(selectedDayDate, st, nextKey);
         updateNextLessonPanel(currentDayEmpty ? next : null);
     }
 
@@ -404,6 +564,7 @@ public class MainActivity extends AppCompatActivity {
                     calc = repo.getWeekCalculator();
                     loadWeek();
                     updateLastUpdatedBanner();
+                    updateFavoritesBar();
                 });
             }
 
@@ -430,6 +591,10 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public boolean onOptionsItemSelected(MenuItem it) {
+        if (it.getItemId() == R.id.action_bell_schedule) {
+            BellScheduleDialog.show(this);
+            return true;
+        }
         if (it.getItemId() == R.id.action_settings) {
             startActivity(new Intent(this, SettingsActivity.class));
             return true;
