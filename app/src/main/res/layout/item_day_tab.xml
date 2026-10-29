@@ -4,26 +4,34 @@
     android:layout_height="wrap_content"
     android:gravity="center_horizontal"
     android:orientation="vertical"
+    android:paddingStart="10dp"
     android:paddingTop="6dp"
-    android:paddingBottom="6dp"
-    android:minWidth="52dp">
+    android:paddingEnd="10dp"
+    android:paddingBottom="6dp">
 
-    <TextView
-        android:id="@+id/tvTabDayName"
+    <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textColor="@color/white_70"
-        android:textSize="11sp"
-        android:textStyle="bold" />
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
 
-    <TextView
-        android:id="@+id/tvTabDayNumber"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="2dp"
-        android:textColor="#FFFFFF"
-        android:textSize="16sp"
-        android:textStyle="bold" />
+        <TextView
+            android:id="@+id/tvTabDayName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/white_90"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvTabDayNumber"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+    </LinearLayout>
 
     <TextView
         android:id="@+id/tvTabBadge"
@@ -31,11 +39,13 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="3dp"
         android:background="@drawable/bg_day_badge"
-        android:paddingStart="5dp"
-        android:paddingTop="1dp"
-        android:paddingEnd="5dp"
-        android:paddingBottom="1dp"
-        android:textSize="8sp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:paddingStart="6dp"
+        android:paddingTop="2dp"
+        android:paddingEnd="6dp"
+        android:paddingBottom="2dp"
+        android:textSize="9sp"
         android:textStyle="bold"
         android:visibility="gone" />
 

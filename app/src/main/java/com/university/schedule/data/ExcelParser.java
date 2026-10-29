@@ -49,21 +49,49 @@ public class ExcelParser {
     private static final long MAX_XLSX_SIZE_BYTES = 50L * 1024 * 1024; // 50 МБ
 
     public List<ScheduleItem> parseGroups(InputStream in) throws Exception {
-        return parseSheet(in, Constants.SHEET_INDEX_GROUPS, ScheduleDao.SOURCE_GROUP);
+        return parseSheetByNameOrIndex(in, "групп", Constants.SHEET_INDEX_GROUPS, ScheduleDao.SOURCE_GROUP);
     }
 
     public List<ScheduleItem> parseTeachers(InputStream in) throws Exception {
-        return parseSheet(in, Constants.SHEET_INDEX_TEACHERS, ScheduleDao.SOURCE_TEACHER);
+        return parseSheetByNameOrIndex(in, "преподават", Constants.SHEET_INDEX_TEACHERS, ScheduleDao.SOURCE_TEACHER);
     }
 
-    private List<ScheduleItem> parseSheet(InputStream in, int sheetIndex, String source) throws Exception {
+    private Sheet findTargetSheet(Workbook wb, String keyword, int defaultIndex, String source) {
+        if (keyword != null) {
+            String lowKeyword = keyword.toLowerCase();
+            for (int i = 0; i < wb.getNumberOfSheets(); i++) {
+                String name = wb.getSheetName(i);
+                if (name == null) continue;
+                String low = name.toLowerCase();
+                if (ScheduleDao.SOURCE_GROUP.equals(source)) {
+                    if (low.contains(lowKeyword) && !low.contains("преподават") && !low.contains("помещен")) {
+                        return wb.getSheetAt(i);
+                    }
+                } else if (ScheduleDao.SOURCE_TEACHER.equals(source)) {
+                    if (low.contains(lowKeyword)) {
+                        return wb.getSheetAt(i);
+                    }
+                }
+            }
+        }
+        if (defaultIndex >= 0 && defaultIndex < wb.getNumberOfSheets()) {
+            return wb.getSheetAt(defaultIndex);
+        }
+        return null;
+    }
+
+    public List<ScheduleItem> parseSheet(InputStream in, int sheetIndex, String source) throws Exception {
+        return parseSheetByNameOrIndex(in, null, sheetIndex, source);
+    }
+
+    private List<ScheduleItem> parseSheetByNameOrIndex(InputStream in, String keyword, int defaultIndex, String source) throws Exception {
         List<ScheduleItem> result = new ArrayList<>();
         try (Workbook wb = new XSSFWorkbook(new BoundedInputStream(in, MAX_XLSX_SIZE_BYTES))) {
-            if (sheetIndex >= wb.getNumberOfSheets()) {
-                Log.w(TAG, "Лист #" + sheetIndex + " отсутствует (всего " + wb.getNumberOfSheets() + ")");
+            Sheet sheet = findTargetSheet(wb, keyword, defaultIndex, source);
+            if (sheet == null) {
+                Log.w(TAG, "Лист для " + source + " (поиск: " + keyword + ") не найден (всего " + wb.getNumberOfSheets() + ")");
                 return result;
             }
-            Sheet sheet = wb.getSheetAt(sheetIndex);
             int headerRowIdx = findHeaderRow(sheet);
             if (headerRowIdx < 0) {
                 Log.w(TAG, "Не найдена строка-шапка на листе " + sheet.getSheetName());
@@ -105,7 +133,7 @@ public class ExcelParser {
                     if (colName == null || colName.isEmpty()) continue;
                     String cell = getStr(row.getCell(c));
                     if (cell == null) continue;
-                    for (String line : cell.split("\\r?\n")) {
+                    for (String line : cell.split("\\r?\\n")) {
                         ScheduleItem item = parseLine(line, currentWeekType, currentDay, lesson, colName, source);
                         if (item != null) result.add(item);
                     }
@@ -122,7 +150,19 @@ public class ExcelParser {
             Row row = sheet.getRow(r);
             if (row == null) continue;
             String c1 = trim(getStr(row.getCell(1)));
-            if ("Группа".equalsIgnoreCase(c1)) return r;
+            if ("Группа".equalsIgnoreCase(c1)
+                    || "Преподаватель".equalsIgnoreCase(c1)
+                    || "Преподаватели".equalsIgnoreCase(c1)
+                    || c1.toLowerCase().contains("групп")
+                    || c1.toLowerCase().contains("преподават")) {
+                return r;
+            }
+            if (row.getLastCellNum() > 3) {
+                String c3 = trim(getStr(row.getCell(3)));
+                if (!c3.isEmpty() && (GROUP_TOKEN.matcher(c3).matches() || c3.contains("."))) {
+                    return r;
+                }
+            }
         }
         return -1;
     }
@@ -162,20 +202,60 @@ public class ExcelParser {
         List<String> tt = tokens(tail);
         String room = peelRoom(tt);
         String teacher;
-        // Для листа преподавателей: первый токен может быть группой (например "ИВТ-401")
         String groupName = null;
-        if (ScheduleDao.SOURCE_TEACHER.equals(source) && !tt.isEmpty()) {
-            String firstToken = tt.get(0);
-            if (GROUP_TOKEN.matcher(firstToken).matches()) {
-                groupName = firstToken;
-                tt.remove(0);
+
+        if (ScheduleDao.SOURCE_TEACHER.equals(source)) {
+            // Для листа преподавателей: группы обычно находятся в начале ячейки перед названием предмета,
+            // либо первым токеном в хвосте.
+            List<String> detectedGroups = new ArrayList<>();
+            if (subjectRaw != null) {
+                List<String> subTokens = tokens(subjectRaw);
+                while (!subTokens.isEmpty() && GROUP_TOKEN.matcher(subTokens.get(0)).matches()) {
+                    detectedGroups.add(subTokens.remove(0));
+                }
+                subjectRaw = join(subTokens);
             }
-        }
-        if (typeStart >= 0) {
-            teacher = join(tt);
+            if (detectedGroups.isEmpty() && !tt.isEmpty() && GROUP_TOKEN.matcher(tt.get(0)).matches()) {
+                detectedGroups.add(tt.remove(0));
+            }
+            if (!detectedGroups.isEmpty()) {
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < detectedGroups.size(); i++) {
+                    if (i > 0) sb.append(", ");
+                    sb.append(detectedGroups.get(i));
+                }
+                groupName = sb.toString();
+            }
+
+            if (typeStart >= 0) {
+                teacher = join(tt);
+            } else {
+                teacher = peelTeacherSuffix(tt);
+                subjectRaw = join(tt);
+                if (groupName == null) {
+                    List<String> subTokens = tokens(subjectRaw);
+                    while (!subTokens.isEmpty() && GROUP_TOKEN.matcher(subTokens.get(0)).matches()) {
+                        detectedGroups.add(subTokens.remove(0));
+                    }
+                    if (!detectedGroups.isEmpty()) {
+                        subjectRaw = join(subTokens);
+                        StringBuilder sb = new StringBuilder();
+                        for (int i = 0; i < detectedGroups.size(); i++) {
+                            if (i > 0) sb.append(", ");
+                            sb.append(detectedGroups.get(i));
+                        }
+                        groupName = sb.toString();
+                    }
+                }
+            }
         } else {
-            teacher = peelTeacherSuffix(tt);
-            subjectRaw = join(tt);
+            // Для листа групп: хвост содержит преподавателя
+            if (typeStart >= 0) {
+                teacher = join(tt);
+            } else {
+                teacher = peelTeacherSuffix(tt);
+                subjectRaw = join(tt);
+            }
         }
 
         String subject = cleanSubject(subjectRaw);
@@ -187,25 +267,17 @@ public class ExcelParser {
         item.setLessonNumber(lesson);
         item.setSubjectName(subject);
         item.setLessonType(type);
-        item.setTeacherName(teacher);
         item.setRoom(room);
         item.setWeekSpec(weekSpec);
         item.setSource(source);
-        
-        // Для преподавателей: groupName уже установлен из первого токена, если он был распознан как группа
-        // Для групп: colName содержит название группы
+
         if (ScheduleDao.SOURCE_GROUP.equals(source)) {
             item.setGroupName(colName);
+            item.setTeacherName(teacher);
         } else if (ScheduleDao.SOURCE_TEACHER.equals(source)) {
-            // Сохраняем группу, если она была распознана в первом токене
-            if (groupName != null && !groupName.trim().isEmpty()) {
-                item.setGroupName(groupName);
-            }
-            // Имя преподавателя берём из заголовка колонки только если группа не была найдена в ячейке
-            // (если группа найдена в ячейке, значит teacher уже содержит правильное значение из peelTeacherSuffix)
-            if (groupName == null || groupName.trim().isEmpty()) {
-                item.setTeacherName(colName);
-            }
+            // Для преподавателей: имя преподавателя берётся из заголовка колонки
+            item.setTeacherName(colName != null && !colName.trim().isEmpty() ? colName.trim() : teacher);
+            item.setGroupName(groupName);
         }
         return item;
     }
