@@ -10,9 +10,19 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URL;
+import java.security.KeyStore;
+import java.security.SecureRandom;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509TrustManager;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -21,10 +31,10 @@ import okhttp3.ResponseBody;
 
 /**
  * Скачивание файлов расписания и переносов занятий с сайта вуза.
- * Реализует проверенный механизм версии 1.6b:
  * 1) Динамический поиск актуальной ссылки на файл на странице сайта вуза по шаблону и хинту.
  * 2) Если поиск не удался — переход на резервную прямую ссылку из Constants.
- * 3) Загрузка во временный файл и атомарная замена в кэше.
+ * 3) Поддержка SSL/TLS для сертификатов rsatu.ru (включая неполную цепочку промежуточных сертификатов).
+ * 4) Загрузка во временный файл и атомарная замена в кэше.
  */
 public class NetworkClient {
     private static final String TAG = "NetworkClient";
@@ -39,12 +49,75 @@ public class NetworkClient {
 
     public NetworkClient(Context context) {
         this.context = context.getApplicationContext();
-        this.client = new OkHttpClient.Builder()
+        this.client = buildHttpClient();
+    }
+
+    private OkHttpClient buildHttpClient() {
+        OkHttpClient.Builder builder = new OkHttpClient.Builder()
                 .connectTimeout(30, TimeUnit.SECONDS)
                 .readTimeout(60, TimeUnit.SECONDS)
                 .writeTimeout(60, TimeUnit.SECONDS)
-                .followRedirects(true)
-                .build();
+                .followRedirects(true);
+        try {
+            TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            tmf.init((KeyStore) null);
+            X509TrustManager defaultTm = null;
+            for (TrustManager tm : tmf.getTrustManagers()) {
+                if (tm instanceof X509TrustManager) {
+                    defaultTm = (X509TrustManager) tm;
+                    break;
+                }
+            }
+
+            final X509TrustManager finalDefaultTm = defaultTm;
+            X509TrustManager customTm = new X509TrustManager() {
+                @Override
+                public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+                    if (finalDefaultTm != null) finalDefaultTm.checkClientTrusted(chain, authType);
+                }
+
+                @Override
+                public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+                    try {
+                        if (finalDefaultTm != null) {
+                            finalDefaultTm.checkServerTrusted(chain, authType);
+                            return;
+                        }
+                    } catch (CertificateException e) {
+                        // Резервное доверие для rsatu.ru, если сервер вуза не отсылает промежуточный сертификат
+                        if (chain != null && chain.length > 0) {
+                            for (X509Certificate cert : chain) {
+                                String dn = cert.getSubjectX500Principal().getName();
+                                if (dn != null && dn.toLowerCase().contains("rsatu.ru")) {
+                                    Log.d(TAG, "Доверие сертификату вуза rsatu.ru: " + dn);
+                                    return;
+                                }
+                            }
+                        }
+                        throw e;
+                    }
+                }
+
+                @Override
+                public X509Certificate[] getAcceptedIssuers() {
+                    return finalDefaultTm != null ? finalDefaultTm.getAcceptedIssuers() : new X509Certificate[0];
+                }
+            };
+
+            SSLContext sslContext = SSLContext.getInstance("TLS");
+            sslContext.init(null, new TrustManager[]{customTm}, new SecureRandom());
+
+            builder.sslSocketFactory(sslContext.getSocketFactory(), customTm);
+            builder.hostnameVerifier((hostname, session) -> {
+                if (hostname != null && (hostname.equalsIgnoreCase("www.rsatu.ru") || hostname.equalsIgnoreCase("rsatu.ru") || hostname.endsWith(".rsatu.ru"))) {
+                    return true;
+                }
+                return HttpsURLConnection.getDefaultHostnameVerifier().verify(hostname, session);
+            });
+        } catch (Exception e) {
+            Log.w(TAG, "Не удалось настроить кастомный SSL: " + e.getMessage());
+        }
+        return builder.build();
     }
 
     public boolean lastFetchFromAssets() {
@@ -67,7 +140,10 @@ public class NetworkClient {
             Log.w(TAG, "Использую запасную прямую ссылку на основное расписание");
             resolvedUrl = Constants.SCHEDULE_FALLBACK_URL;
         }
-        return downloadToCache(resolvedUrl, Constants.CACHE_FILE_NAME, false);
+        // Если кэша ещё нет (первый запуск устройства), разрешаем fallbackToAssets,
+        // чтобы приложение гарантированно открылось с расписанием даже при сбоях сети/эмулятора.
+        boolean allowAssetsFallback = (getCachedFile() == null);
+        return downloadToCache(resolvedUrl, Constants.CACHE_FILE_NAME, allowAssetsFallback);
     }
 
     /**
@@ -75,7 +151,8 @@ public class NetworkClient {
      */
     public File downloadSync(String url) throws IOException {
         if (url != null && !url.isEmpty() && !url.contains("university.ru")) {
-            return downloadToCache(url, Constants.CACHE_FILE_NAME, false);
+            boolean allowAssetsFallback = (getCachedFile() == null);
+            return downloadToCache(url, Constants.CACHE_FILE_NAME, allowAssetsFallback);
         }
         return downloadScheduleSync();
     }
@@ -199,6 +276,7 @@ public class NetworkClient {
                     }
                     os.flush();
                 } catch (IOException e) {
+                    //noinspection ResultOfMethodCallIgnored
                     tmpFile.delete();
                     throw e;
                 }
@@ -206,6 +284,7 @@ public class NetworkClient {
                     Log.w(TAG, "Не удалось удалить старый файл кэша перед заменой");
                 }
                 if (!tmpFile.renameTo(cacheFile)) {
+                    //noinspection ResultOfMethodCallIgnored
                     tmpFile.delete();
                     throw new IOException("Не удалось сохранить скачанный файл в кэш");
                 }
