@@ -35,14 +35,19 @@
     <color name="progress_track">#E0E4EE</color>
 
     <!-- Бейджи-пометки дней: сегодня / завтра / через N дней -->
-    <color name="badge_today_bg">#1565C0</color>
-    <color name="badge_today_text">#FFFFFF</color>
-    <color name="badge_tomorrow_bg">#FFE0B2</color>
-    <color name="badge_tomorrow_text">#E65100</color>
-    <color name="badge_future_bg">#ECEFF1</color>
-    <color name="badge_future_text">#546E7A</color>
+    <color name="badge_today_bg">#FFFFFF</color>
+    <color name="badge_today_text">#0D47A1</color>
+    <color name="badge_tomorrow_bg">#FFE082</color>
+    <color name="badge_tomorrow_text">#BF360C</color>
+    <color name="badge_future_bg">#3DFFFFFF</color>
+    <color name="badge_future_text">#FFFFFF</color>
+
+    <!-- Баннер устаревших данных -->
+    <color name="banner_stale_bg">#FFF3E0</color>
+    <color name="banner_stale_text">#E65100</color>
 
     <!-- Плашка даты в шапке (между названием группы и настройками) -->
-    <color name="date_pill_bg">#22FFFFFF</color>
+    <color name="date_pill_bg">#33FFFFFF</color>
+    <color name="date_pill_stroke">#80FFFFFF</color>
     <color name="date_pill_text">#FFFFFF</color>
 </resources>

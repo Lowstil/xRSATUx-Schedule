@@ -8,6 +8,7 @@ import java.time.LocalTime;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Юнит-тесты для ScheduleClock.compute — граничные случаи (полночь, конец
@@ -135,5 +136,27 @@ public class ScheduleClockTest {
         ScheduleClock.State st = ScheduleClock.compute(MONDAY, LocalTime.of(8, 30));
         assertNotNull("Ровно в момент начала пара должна уже считаться текущей", st.current);
         assertEquals(1, st.current.lesson);
+    }
+
+    @Test
+    public void lessonProgressAndMinutesLeftComputedCorrectly() {
+        // 1 пара: 08:30 - 10:05 (всего 95 минут).
+        // В 09:00: прошло 30 мин, осталось 65 мин.
+        ScheduleClock.State st = ScheduleClock.compute(MONDAY, LocalTime.of(9, 0));
+        assertNotNull(st.current);
+        assertEquals(65, st.minutesLeftInCurrent);
+        assertTrue(st.currentProgressPercent >= 30 && st.currentProgressPercent <= 33);
+    }
+
+    @Test
+    public void recessBreakComputedCorrectly() {
+        // Перемена между 1 и 2 парой: 10:05 - 10:15.
+        // В 10:10: идет перемена, до 2 пары осталось 5 минут.
+        ScheduleClock.State st = ScheduleClock.compute(MONDAY, LocalTime.of(10, 10));
+        assertNull(st.current);
+        assertNotNull(st.next);
+        assertEquals(2, st.next.lesson);
+        assertTrue("Должна быть пометка перемены", st.isBreak);
+        assertEquals(5, st.minutesUntilNext);
     }
 }

@@ -4,12 +4,14 @@ import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
-import android.graphics.Paint;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -17,6 +19,7 @@ import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.university.schedule.R;
+import com.university.schedule.model.LessonNote;
 import com.university.schedule.model.ScheduleItem;
 import com.university.schedule.util.Constants;
 import com.university.schedule.util.DateUtils;
@@ -29,38 +32,53 @@ import java.util.List;
 import java.util.Map;
 
 public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.ViewHolder> {
-    /** Прозрачность фонов боксов "номер пары" и "тип" — чуть плотнее, чем у корпуса (0.14). */
+    public interface OnLessonClickListener {
+        void onLessonClicked(ScheduleItem item, LocalDate date, LessonNote existingNote);
+    }
+
     private static final float BOX_ALPHA_LIGHT = 0.20f;
     private static final float BOX_ALPHA_DARK = 0.28f;
-    /** Прозрачность фона плашки корпуса/кабинета (самая лёгкая). */
     private static final float ROOM_ALPHA_LIGHT = 0.14f;
     private static final float ROOM_ALPHA_DARK = 0.22f;
-    /** Основной синий для бокса номера пары — отдельные тона под каждую тему. */
     private static final int PRIMARY_LIGHT = 0xFF1565C0;
     private static final int PRIMARY_DARK = 0xFF8AB4F8;
-    /** Цвет пометки "перенесено/замена" — янтарный, привлекает внимание, но не тревожный. */
     private static final int TRANSFER_LIGHT = 0xFFB26A00;
     private static final int TRANSFER_DARK = 0xFFF3A96B;
-    /** Цвет пометки отменённого (перенесённого на другое время) занятия. */
     private static final int CANCELLED_LIGHT = 0xFF9E9E9E;
     private static final int CANCELLED_DARK = 0xFF7C8098;
-    /** Толщина яркой обводки карточек "Идёт сейчас"/"Следующая", в dp. */
     private static final float STROKE_WIDTH_DP = 2f;
 
-    /** Кэш фоновых drawable по ключу (цвет+альфа+радиус). */
     private final Map<Long, GradientDrawable> drawableCache = new HashMap<>();
     private List<ScheduleItem> lessons;
     private LocalDate dayDate;
     private ScheduleClock.LessonKey currentKey;
     private ScheduleClock.LessonKey nextKey;
+    private ScheduleClock.State clockState;
+    private Map<Integer, LessonNote> notesMap = new HashMap<>();
+    private OnLessonClickListener lessonClickListener;
 
-    public DayScheduleAdapter(List<ScheduleItem> lessons) { this.lessons = lessons; }
+    public DayScheduleAdapter(List<ScheduleItem> lessons) {
+        this.lessons = lessons;
+    }
 
-    public void updateData(List<ScheduleItem> n) { this.lessons = n; notifyDataSetChanged(); }
+    public void setOnLessonClickListener(OnLessonClickListener l) {
+        this.lessonClickListener = l;
+    }
 
-    public void applyClock(LocalDate date, ScheduleClock.LessonKey current, ScheduleClock.LessonKey next) {
+    public void updateData(List<ScheduleItem> n) {
+        this.lessons = n;
+        notifyDataSetChanged();
+    }
+
+    public void setNotes(Map<Integer, LessonNote> notes) {
+        this.notesMap = (notes != null) ? notes : new HashMap<>();
+        notifyDataSetChanged();
+    }
+
+    public void applyClock(LocalDate date, ScheduleClock.State state, ScheduleClock.LessonKey next) {
         this.dayDate = date;
-        this.currentKey = current;
+        this.clockState = state;
+        this.currentKey = (state != null) ? state.current : null;
         this.nextKey = next;
         notifyDataSetChanged();
     }
@@ -71,7 +89,8 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
                 && key.lesson == it.getLessonNumber();
     }
 
-    @NonNull @Override
+    @NonNull
+    @Override
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup p, int t) {
         return new ViewHolder(LayoutInflater.from(p.getContext()).inflate(R.layout.item_lesson, p, false));
     }
@@ -85,9 +104,11 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
         int primary = dark ? PRIMARY_DARK : PRIMARY_LIGHT;
         ScheduleItem it = lessons.get(pos);
         int n = it.getLessonNumber();
+
         h.tvLessonNumber.setText(String.valueOf(n));
         h.tvLessonNumber.setBackground(tintedRound(ctx, primary, boxAlpha, 12));
         h.tvLessonNumber.setTextColor(primary);
+
         int displayDow = (dayDate != null) ? DateUtils.toScheduleDayOfWeek(dayDate) : it.getDayOfWeek();
         String[][] t_arr = Constants.getLessonTimes(displayDow);
         if (n >= 1 && n <= t_arr.length) {
@@ -97,6 +118,7 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
             h.tvTimeStart.setText("");
             h.tvTimeEnd.setText("");
         }
+
         h.tvSubject.setText(it.getSubjectName());
         String code = shortType(it.getLessonType());
         int tc = typeColor(it.getLessonType(), dark);
@@ -104,7 +126,20 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
         h.tvLessonType.setVisibility(code.isEmpty() ? View.GONE : View.VISIBLE);
         h.tvLessonType.setBackground(tintedRound(ctx, tc, boxAlpha, 8));
         h.tvLessonType.setTextColor(tc);
-        setOrHide(h.tvTeacher, it.getTeacherName());
+
+        if ("teacher".equals(it.getSource())) {
+            String grp = it.getGroupName();
+            if (grp != null && !grp.trim().isEmpty()) {
+                setOrHide(h.tvTeacher, formatTeacherGroupLabel(grp));
+            } else {
+                setOrHide(h.tvTeacher, it.getTeacherName());
+            }
+            h.tvGroups.setVisibility(View.GONE);
+        } else {
+            setOrHide(h.tvTeacher, it.getTeacherName());
+            h.tvGroups.setVisibility(View.GONE);
+        }
+
         RoomFormatter.RoomInfo ri = RoomFormatter.parse(it.getRoom(), dark);
         if (ri == null) {
             h.roomChip.setVisibility(View.GONE);
@@ -121,8 +156,8 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
                 h.tvRoom.setVisibility(View.GONE);
             }
         }
+
         h.tvOnline.setVisibility(it.isOnline() ? View.VISIBLE : View.GONE);
-        setOrHide(h.tvGroups, it.getGroupName());
         String spec = it.getWeekSpec();
         if (spec != null && !spec.isEmpty() && !"1-18".equals(spec)) {
             h.tvWeekRange.setText("недели " + spec);
@@ -130,6 +165,7 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
         } else {
             h.tvWeekRange.setVisibility(View.GONE);
         }
+
         if (it.isCancelled()) {
             h.tvSubject.setPaintFlags(h.tvSubject.getPaintFlags() | Paint.STRIKE_THRU_TEXT_FLAG);
             h.itemView.setAlpha(0.55f);
@@ -154,6 +190,25 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
                 h.tvTransferNote.setVisibility(View.GONE);
             }
         }
+
+        // Отображение личной заметки или ДЗ к паре
+        LessonNote noteItem = notesMap.get(n);
+        if (noteItem != null && noteItem.getNoteText() != null && !noteItem.getNoteText().isEmpty()) {
+            h.noteBadge.setVisibility(View.VISIBLE);
+            h.tvNoteText.setText(noteItem.getNoteText());
+            if (noteItem.isCompleted()) {
+                h.tvNoteText.setPaintFlags(h.tvNoteText.getPaintFlags() | Paint.STRIKE_THRU_TEXT_FLAG);
+                h.tvNoteText.setTextColor(ContextCompat.getColor(ctx, R.color.text_secondary));
+                h.ivNoteIcon.setColorFilter(ContextCompat.getColor(ctx, R.color.online));
+            } else {
+                h.tvNoteText.setPaintFlags(h.tvNoteText.getPaintFlags() & ~Paint.STRIKE_THRU_TEXT_FLAG);
+                h.tvNoteText.setTextColor(ContextCompat.getColor(ctx, R.color.text_primary));
+                h.ivNoteIcon.setColorFilter(ContextCompat.getColor(ctx, R.color.accent));
+            }
+        } else {
+            h.noteBadge.setVisibility(View.GONE);
+        }
+
         boolean isCurrent = !it.isCancelled() && matchesKey(currentKey, it);
         boolean isNext = !it.isCancelled() && !isCurrent && matchesKey(nextKey, it);
         Object animTag = h.indicator.getTag();
@@ -162,13 +217,22 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
             h.indicator.setTag(null);
         }
         h.indicator.animate().cancel();
+
         if (isCurrent) {
             h.cardView.setCardBackgroundColor(ContextCompat.getColor(ctx, R.color.state_current_bg));
             h.cardView.setStrokeColor(ContextCompat.getColor(ctx, R.color.state_current_accent));
             h.cardView.setStrokeWidth(strokePx(ctx));
             h.stateRow.setVisibility(View.VISIBLE);
-            h.tvState.setText("Идёт сейчас");
+
+            String stateTxt = "Идёт сейчас";
+            if (clockState != null && clockState.minutesLeftInCurrent >= 0) {
+                stateTxt += " (осталось " + clockState.minutesLeftInCurrent + " мин)";
+            }
+            h.tvState.setText(stateTxt);
             h.tvState.setTextColor(ContextCompat.getColor(ctx, R.color.state_current_text));
+            h.progressCurrentLesson.setVisibility(View.VISIBLE);
+            h.progressCurrentLesson.setProgress(clockState != null ? clockState.currentProgressPercent : 0);
+
             h.indicator.setVisibility(View.VISIBLE);
             h.indicator.setAlpha(1f);
             h.indicator.getBackground().mutate().setTint(ContextCompat.getColor(ctx, R.color.state_current_accent));
@@ -184,8 +248,15 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
             h.cardView.setStrokeColor(ContextCompat.getColor(ctx, R.color.state_next_accent));
             h.cardView.setStrokeWidth(strokePx(ctx));
             h.stateRow.setVisibility(View.VISIBLE);
-            h.tvState.setText("Следующая");
+
+            String nextTxt = "Следующая";
+            if (clockState != null && clockState.isBreak && clockState.minutesUntilNext >= 0) {
+                nextTxt += " · перемена (до пары " + clockState.minutesUntilNext + " мин)";
+            }
+            h.tvState.setText(nextTxt);
             h.tvState.setTextColor(ContextCompat.getColor(ctx, R.color.state_next_text));
+            h.progressCurrentLesson.setVisibility(View.GONE);
+
             h.indicator.setVisibility(View.VISIBLE);
             h.indicator.setAlpha(1f);
             h.indicator.getBackground().mutate().setTint(ContextCompat.getColor(ctx, R.color.state_next_accent));
@@ -193,9 +264,16 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
             h.cardView.setCardBackgroundColor(ContextCompat.getColor(ctx, R.color.surface));
             h.cardView.setStrokeWidth(0);
             h.stateRow.setVisibility(View.GONE);
+            h.progressCurrentLesson.setVisibility(View.GONE);
             h.indicator.setVisibility(View.GONE);
             h.indicator.setAlpha(1f);
         }
+
+        h.itemView.setOnClickListener(v -> {
+            if (lessonClickListener != null) {
+                lessonClickListener.onLessonClicked(it, dayDate, notesMap.get(n));
+            }
+        });
     }
 
     @Override
@@ -210,8 +288,21 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
     }
 
     private void setOrHide(TextView tv, String v) {
-        if (v != null && !v.trim().isEmpty()) { tv.setText(v); tv.setVisibility(View.VISIBLE); }
-        else tv.setVisibility(View.GONE);
+        if (v != null && !v.trim().isEmpty()) {
+            tv.setText(v);
+            tv.setVisibility(View.VISIBLE);
+        } else {
+            tv.setVisibility(View.GONE);
+        }
+    }
+
+    private static String formatTeacherGroupLabel(String grp) {
+        if (grp == null || grp.trim().isEmpty()) return "";
+        String label = grp.trim();
+        if (!label.toLowerCase().startsWith("гр")) {
+            return (label.contains(",") || label.contains(" ")) ? "Группы: " + label : "Группа: " + label;
+        }
+        return label;
     }
 
     private static int strokePx(Context c) {
@@ -264,32 +355,43 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
         }
     }
 
-    @Override public int getItemCount() { return lessons != null ? lessons.size() : 0; }
+    @Override
+    public int getItemCount() {
+        return lessons != null ? lessons.size() : 0;
+    }
 
     static class ViewHolder extends RecyclerView.ViewHolder {
         com.google.android.material.card.MaterialCardView cardView;
-        View roomChip, stateRow, indicator;
+        View roomChip, stateRow, indicator, noteBadge;
+        ProgressBar progressCurrentLesson;
+        ImageView ivNoteIcon;
+        TextView tvNoteText;
         TextView tvLessonNumber, tvTimeStart, tvTimeEnd, tvSubject, tvLessonType,
                  tvTeacher, tvBuilding, tvRoom, tvGroups, tvOnline, tvWeekRange, tvTransferNote, tvState;
+
         ViewHolder(@NonNull View v) {
             super(v);
-            cardView       = v.findViewById(R.id.cardView);
-            roomChip       = v.findViewById(R.id.roomChip);
-            stateRow       = v.findViewById(R.id.stateRow);
-            indicator      = v.findViewById(R.id.indicator);
-            tvState        = v.findViewById(R.id.tvState);
-            tvLessonNumber = v.findViewById(R.id.tvLessonNumber);
-            tvTimeStart    = v.findViewById(R.id.tvTimeStart);
-            tvTimeEnd      = v.findViewById(R.id.tvTimeEnd);
-            tvSubject      = v.findViewById(R.id.tvSubject);
-            tvLessonType   = v.findViewById(R.id.tvLessonType);
-            tvTeacher      = v.findViewById(R.id.tvTeacher);
-            tvBuilding     = v.findViewById(R.id.tvBuilding);
-            tvRoom         = v.findViewById(R.id.tvRoom);
-            tvGroups       = v.findViewById(R.id.tvGroups);
-            tvOnline       = v.findViewById(R.id.tvOnline);
-            tvWeekRange    = v.findViewById(R.id.tvWeekRange);
-            tvTransferNote = v.findViewById(R.id.tvTransferNote);
+            cardView              = v.findViewById(R.id.cardView);
+            roomChip              = v.findViewById(R.id.roomChip);
+            stateRow              = v.findViewById(R.id.stateRow);
+            indicator             = v.findViewById(R.id.indicator);
+            progressCurrentLesson = v.findViewById(R.id.progressCurrentLesson);
+            noteBadge             = v.findViewById(R.id.noteBadge);
+            ivNoteIcon            = v.findViewById(R.id.ivNoteIcon);
+            tvNoteText            = v.findViewById(R.id.tvNoteText);
+            tvState               = v.findViewById(R.id.tvState);
+            tvLessonNumber        = v.findViewById(R.id.tvLessonNumber);
+            tvTimeStart           = v.findViewById(R.id.tvTimeStart);
+            tvTimeEnd             = v.findViewById(R.id.tvTimeEnd);
+            tvSubject             = v.findViewById(R.id.tvSubject);
+            tvLessonType          = v.findViewById(R.id.tvLessonType);
+            tvTeacher             = v.findViewById(R.id.tvTeacher);
+            tvBuilding            = v.findViewById(R.id.tvBuilding);
+            tvRoom                = v.findViewById(R.id.tvRoom);
+            tvGroups              = v.findViewById(R.id.tvGroups);
+            tvOnline              = v.findViewById(R.id.tvOnline);
+            tvWeekRange           = v.findViewById(R.id.tvWeekRange);
+            tvTransferNote        = v.findViewById(R.id.tvTransferNote);
         }
     }
 }
