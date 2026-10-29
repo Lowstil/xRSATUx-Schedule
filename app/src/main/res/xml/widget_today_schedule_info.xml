@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    updatePeriodMillis="1800000" (30 минут) — это МИНИМАЛЬНЫЙ гарантированный
+    интервал автообновления от системы (реально Android может обновлять реже,
+    особенно в фоне/при экономии батареи — так задокументировано в самом
+    AppWidgetProviderInfo). Для по-настоящему своевременного обновления (сразу
+    после смены пары или после ручного обновления расписания в приложении)
+    используется прямой вызов TodayScheduleWidgetProvider.updateAllWidgets()
+    из ScheduleRepository после успешной загрузки — updatePeriodMillis здесь
+    просто подстраховка на случай, если пользователь днями не открывает
+    приложение и не запускает автообновление.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:initialLayout="@layout/widget_today_schedule"
+    android:minWidth="250dp"
+    android:minHeight="180dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="3"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:updatePeriodMillis="1800000"
+    android:description="@string/widget_description">
+</appwidget-provider>

@@ -6,6 +6,9 @@
 *.dll
 *.so
 *.a
+build/
+app/build/
+local.properties
 
 # Dependencies
 node_modules/

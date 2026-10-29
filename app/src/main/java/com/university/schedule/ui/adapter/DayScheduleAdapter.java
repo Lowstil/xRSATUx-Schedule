@@ -108,7 +108,7 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
         // Для преподавателей: показываем группу вместо имени преподавателя (им и так известно своё имя)
         // Для групп: показываем имя преподавателя как обычно
         if ("teacher".equals(it.getSource()) && it.getGroupName() != null && !it.getGroupName().trim().isEmpty()) {
-            setOrHide(h.tvTeacher, it.getGroupName());
+            setOrHide(h.tvTeacher, formatTeacherGroupLabel(it.getGroupName()));
             h.tvGroups.setVisibility(View.GONE);
         } else {
             // Показываем имя преподавателя (для групп) или имя преподавателя из записи (если группа не найдена в ячейке)
@@ -222,6 +222,15 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
     private void setOrHide(TextView tv, String v) {
         if (v != null && !v.trim().isEmpty()) { tv.setText(v); tv.setVisibility(View.VISIBLE); }
         else tv.setVisibility(View.GONE);
+    }
+
+    private static String formatTeacherGroupLabel(String grp) {
+        if (grp == null || grp.trim().isEmpty()) return "";
+        String label = grp.trim();
+        if (!label.toLowerCase().startsWith("гр")) {
+            return (label.contains(",") || label.contains(" ")) ? "Группы: " + label : "Группа: " + label;
+        }
+        return label;
     }
 
     private static int strokePx(Context c) {
