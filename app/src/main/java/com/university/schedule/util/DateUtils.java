@@ -46,9 +46,16 @@ public final class DateUtils {
         return java.time.LocalTime.now(ZoneId.systemDefault());
     }
     public static String monthNameRu(LocalDate date) {
+        if (date == null) return "";
         String name = date.getMonth().getDisplayName(TextStyle.FULL_STANDALONE, RU);
         if (name.isEmpty()) return name;
         return Character.toUpperCase(name.charAt(0)) + name.substring(1);
+    }
+    public static String formatMonthRangeRu(LocalDate start, LocalDate end) {
+        if (start == null && end == null) return "";
+        if (start == null) return monthNameRu(end);
+        if (end == null || start.getMonth() == end.getMonth()) return monthNameRu(start);
+        return monthNameRu(start) + " – " + monthNameRu(end);
     }
     public static String relativeDayLabel(LocalDate date, LocalDate today) {
         if (date == null || today == null) return null;
@@ -56,7 +63,7 @@ public final class DateUtils {
         if (diff == 0) return "Сегодня";
         if (diff == 1) return "Завтра";
         if (diff < 0) return null;
-        return "через " + diff + " " + pluralDays((int) diff);
+        return "Наступит через " + diff + " " + pluralDays((int) diff);
     }
     private static String pluralDays(int n) {
         int rem100 = n % 100;

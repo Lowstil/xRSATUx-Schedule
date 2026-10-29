@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Градиентный фон: глубокий тёмно-синий → фиолетовый -->
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="20dp" />
+            <gradient
+                android:startColor="#E61E2746"
+                android:centerColor="#E6251B4E"
+                android:endColor="#E61A2440"
+                android:angle="135" />
+        </shape>
+    </item>
+    <!-- Тонкая светлая рамка — эффект "стекла", выделяет виджет на любых обоях -->
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="20dp" />
+            <stroke
+                android:width="1dp"
+                android:color="#33FFFFFF" />
+        </shape>
+    </item>
+</layer-list>

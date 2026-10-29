@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Полупрозрачный белый фон — glassmorphism поверх градиента -->
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="12dp" />
+            <solid android:color="#18FFFFFF" />
+        </shape>
+    </item>
+    <!-- Тонкая светлая обводка — отделяет строки друг от друга -->
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="12dp" />
+            <stroke
+                android:width="0.5dp"
+                android:color="#22FFFFFF" />
+        </shape>
+    </item>
+</layer-list>

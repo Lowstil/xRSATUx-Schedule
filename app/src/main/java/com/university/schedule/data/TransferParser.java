@@ -195,29 +195,31 @@ public class TransferParser {
         }
     }
 
+    private static final java.time.format.DateTimeFormatter[] DATE_FORMATTERS = new java.time.format.DateTimeFormatter[] {
+        java.time.format.DateTimeFormatter.ISO_LOCAL_DATE,
+        java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy"),
+        java.time.format.DateTimeFormatter.ofPattern("d.M.yyyy"),
+        java.time.format.DateTimeFormatter.ofPattern("dd.MM.yy")
+    };
+
     private LocalDate getDate(Cell cell) {
         if (cell == null) return null;
         try {
-            if (cell.getCellType() == CellType.NUMERIC && DateUtil.isCellDateFormatted(cell)) {
-                // ВАЖНО: раньше здесь было cell.getDateCellValue() + .atZone(MOSCOW).
-                // getDateCellValue() внутри уже конвертирует серийное число Excel в
-                // java.util.Date, используя ЧАСОВОЙ ПОЯС УСТРОЙСТВА (TimeZone.getDefault())
-                // — это задокументированное поведение Apache POI. Повторная
-                // интерпретация этого момента времени как московского через
-                // .atZone(MOSCOW) накладывала два РАЗНЫХ, никак не связанных
-                // друг с другом часовых пояса один поверх другого. На устройстве
-                // не с московским часовым поясом это могло сдвинуть дату переноса
-                // на день около полуночи. Excel вообще не хранит информацию о
-                // часовом поясе (даты — "наивные" календарные значения), поэтому
-                // правильный способ прочитать дату — DateUtil.getLocalDateTime(),
-                // который читает серийное число как обычную календарную дату без
-                // какой-либо конвертации зоны — именно так, как её видит человек,
-                // открывший файл в Excel, независимо от часового пояса устройства.
-                return DateUtil.getLocalDateTime(cell.getNumericCellValue()).toLocalDate();
+            if (cell.getCellType() == CellType.NUMERIC) {
+                double val = cell.getNumericCellValue();
+                if (DateUtil.isCellDateFormatted(cell) || (val >= 35000 && val <= 70000)) {
+                    return DateUtil.getLocalDateTime(val).toLocalDate();
+                }
             }
             if (cell.getCellType() == CellType.STRING) {
                 String s = cell.getStringCellValue();
-                return s == null || s.trim().isEmpty() ? null : LocalDate.parse(s.trim());
+                if (s == null || s.trim().isEmpty()) return null;
+                String clean = s.trim();
+                for (java.time.format.DateTimeFormatter df : DATE_FORMATTERS) {
+                    try {
+                        return LocalDate.parse(clean, df);
+                    } catch (Exception ignored) {}
+                }
             }
         } catch (Exception e) {
             return null;
