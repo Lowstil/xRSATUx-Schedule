@@ -103,7 +103,7 @@ initLogic();
 public void loadScheduleFromNetwork(LoadCallback cb) {
 try {
 cb.onProgress("Загрузка файла расписания...");
-File file = networkClient.downloadSync(Constants.SCHEDULE_URL);
+File file = networkClient.downloadScheduleSync();
 cb.onProgress("Обработка файла...");
 parseAndSave(file, cb);
 if (!networkClient.lastFetchFromAssets()) prefsManager.saveLastUpdated(DateUtils.nowIsoDateTime());
