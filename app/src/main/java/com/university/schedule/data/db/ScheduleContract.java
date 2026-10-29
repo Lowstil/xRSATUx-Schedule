@@ -17,7 +17,7 @@ public final class ScheduleContract {
     }
 
     public static final String DATABASE_NAME = "unischedule.db";
-    public static final int DATABASE_VERSION = 2; // v2: добавлена таблица transfers (переносы занятий)
+    public static final int DATABASE_VERSION = 3; // v3: добавлена таблица notes (заметки и ДЗ к парам)
 
     /**
      * Переносы занятий (лист "Переносы" в отдельном xlsx-файле). В отличие от
@@ -84,6 +84,17 @@ public final class ScheduleContract {
         public static final String COLUMN_NAME = "name";
     }
 
+    public static final class NoteEntry implements BaseColumns {
+        public static final String TABLE_NAME = "notes";
+        public static final String COLUMN_DATE = "date";
+        public static final String COLUMN_LESSON_NUMBER = "lesson_number";
+        public static final String COLUMN_SUBJECT_NAME = "subject_name";
+        public static final String COLUMN_NOTE_TEXT = "note_text";
+        public static final String COLUMN_IS_COMPLETED = "is_completed";
+        public static final String COLUMN_CREATED_AT = "created_at";
+        public static final String INDEX_NOTES = "idx_notes_date_lesson";
+    }
+
     public static final String SQL_CREATE_USER_SETTINGS =
             "CREATE TABLE " + UserSettingsEntry.TABLE_NAME + " (" +
                     UserSettingsEntry._ID + " INTEGER PRIMARY KEY AUTOINCREMENT, " +
@@ -146,6 +157,20 @@ public final class ScheduleContract {
             "CREATE INDEX " + TransferEntry.INDEX_DATE_GROUP + " ON " + TransferEntry.TABLE_NAME +
                     "(" + TransferEntry.COLUMN_DATE + ", " + TransferEntry.COLUMN_GROUP_NAME + ")";
 
+    public static final String SQL_CREATE_NOTES =
+            "CREATE TABLE IF NOT EXISTS " + NoteEntry.TABLE_NAME + " (" +
+                    NoteEntry._ID + " INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                    NoteEntry.COLUMN_DATE + " TEXT NOT NULL, " +
+                    NoteEntry.COLUMN_LESSON_NUMBER + " INTEGER NOT NULL, " +
+                    NoteEntry.COLUMN_SUBJECT_NAME + " TEXT NOT NULL, " +
+                    NoteEntry.COLUMN_NOTE_TEXT + " TEXT NOT NULL, " +
+                    NoteEntry.COLUMN_IS_COMPLETED + " INTEGER DEFAULT 0, " +
+                    NoteEntry.COLUMN_CREATED_AT + " TEXT)";
+
+    public static final String SQL_CREATE_INDEX_NOTES =
+            "CREATE INDEX IF NOT EXISTS " + NoteEntry.INDEX_NOTES + " ON " + NoteEntry.TABLE_NAME +
+                    "(" + NoteEntry.COLUMN_DATE + ", " + NoteEntry.COLUMN_LESSON_NUMBER + ")";
+
     public static final String SQL_DELETE_USER_SETTINGS =
             "DROP TABLE IF EXISTS " + UserSettingsEntry.TABLE_NAME;
     public static final String SQL_DELETE_SCHEDULE =
@@ -154,4 +179,6 @@ public final class ScheduleContract {
             "DROP TABLE IF EXISTS " + HolidayEntry.TABLE_NAME;
     public static final String SQL_DELETE_TRANSFERS =
             "DROP TABLE IF EXISTS " + TransferEntry.TABLE_NAME;
+    public static final String SQL_DELETE_NOTES =
+            "DROP TABLE IF EXISTS " + NoteEntry.TABLE_NAME;
 }

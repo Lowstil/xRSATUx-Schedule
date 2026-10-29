@@ -40,6 +40,8 @@ public class ScheduleApplication extends Application {
             enableStrictMode();
         }
         ThemeManager.applySavedMode(this);
+        com.university.schedule.notification.NotificationHelper.initChannels(this);
+        com.university.schedule.notification.ReminderScheduler.rescheduleAll(this);
         Executors.newSingleThreadExecutor().execute(() -> {
             ScheduleRepository.getInstance(this);
             Log.d(TAG, "ScheduleRepository прогрет в фоне");

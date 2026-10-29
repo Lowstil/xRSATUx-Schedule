@@ -49,4 +49,26 @@ public class PrefsManager {
     public int getThemeMode(int defaultMode) {
         return prefs.getInt(Constants.PREF_THEME_MODE, defaultMode);
     }
+    public static final String PREF_REMINDERS_ENABLED = "reminders_enabled";
+    public static final String PREF_REMINDERS_MINUTES = "reminders_minutes";
+    public static final String PREF_MORNING_DIGEST_ENABLED = "morning_digest_enabled";
+
+    public boolean isRemindersEnabled() {
+        return prefs.getBoolean(PREF_REMINDERS_ENABLED, true);
+    }
+    public void setRemindersEnabled(boolean enabled) {
+        prefs.edit().putBoolean(PREF_REMINDERS_ENABLED, enabled).apply();
+    }
+    public int getReminderMinutesBefore() {
+        return prefs.getInt(PREF_REMINDERS_MINUTES, 15);
+    }
+    public void setReminderMinutesBefore(int minutes) {
+        prefs.edit().putInt(PREF_REMINDERS_MINUTES, minutes).apply();
+    }
+    public boolean isMorningDigestEnabled() {
+        return prefs.getBoolean(PREF_MORNING_DIGEST_ENABLED, true);
+    }
+    public void setMorningDigestEnabled(boolean enabled) {
+        prefs.edit().putBoolean(PREF_MORNING_DIGEST_ENABLED, enabled).apply();
+    }
 }
