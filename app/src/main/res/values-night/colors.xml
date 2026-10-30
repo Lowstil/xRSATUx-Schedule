@@ -50,4 +50,14 @@
     <color name="date_pill_bg">#2A3550</color>
     <color name="date_pill_stroke">#5C6BC0</color>
     <color name="date_pill_text">#FFFFFF</color>
+
+    <!-- Прогресс пары: зелёный и оранжевый перерыв -->
+    <color name="progress_segment_green">#66BB6A</color>
+    <color name="progress_segment_orange">#FFA726</color>
+
+    <!-- Бейджи пропуска и перезачёта -->
+    <color name="badge_skipped_bg">#25293A</color>
+    <color name="badge_skipped_text">#9E9E9E</color>
+    <color name="badge_exempt_bg">#26223D</color>
+    <color name="badge_exempt_text">#B39DDB</color>
 </resources>

@@ -22,6 +22,8 @@ import com.university.schedule.util.AppError;
 import com.university.schedule.util.Constants;
 import com.university.schedule.util.DateUtils;
 import com.university.schedule.util.PrefsManager;
+import com.university.schedule.util.ExcludedSubjectsManager;
+import com.university.schedule.util.SkippedLessonsManager;
 import com.university.schedule.widget.TodayScheduleWidgetProvider;
 import java.io.File;
 import java.io.FileInputStream;
@@ -48,6 +50,8 @@ private final NoteDao noteDao;
 private final NetworkClient networkClient;
 private final ExcelParser excelParser;
 private final TransferParser transferParser;
+private final ExcludedSubjectsManager excludedSubjectsManager;
+private final SkippedLessonsManager skippedLessonsManager;
 private final PrefsManager prefsManager;
 private HolidayChecker holidayChecker;
 private WeekCalculator weekCalculator;
@@ -71,6 +75,8 @@ this.networkClient = new NetworkClient(this.context);
 this.excelParser = new ExcelParser();
 this.transferParser = new TransferParser();
 this.prefsManager = new PrefsManager(this.context);
+this.excludedSubjectsManager = new ExcludedSubjectsManager(this.context);
+this.skippedLessonsManager = new SkippedLessonsManager(this.context);
 initLogic();
 }
 private void initLogic() {
@@ -299,6 +305,8 @@ if (lessons == null || lessons.isEmpty()) continue;
 String[][] times = Constants.getLessonTimes(dow);
 for (ScheduleItem it : lessons) {
 if (it.isCancelled()) continue; // отменено переносом
+if (group && excludedSubjectsManager.isExcluded(name, it.getSubjectName())) continue;
+if (skippedLessonsManager.isSkipped(date.toString(), it.getLessonNumber(), it.getSubjectName())) continue;
 int n = it.getLessonNumber();
 if (n < 1 || n > times.length) continue;
 LocalTime start = LocalTime.parse(times[n - 1][0], tf);
@@ -380,6 +388,12 @@ return noteDao.getNotesForDate(date);
 }
 public void saveNote(String date, int lessonNum, String subject, String text, boolean completed) {
 noteDao.saveOrUpdate(date, lessonNum, subject, text, completed);
+}
+public void saveNote(String date, int lessonNum, String subject, String text, String imagePath, boolean completed) {
+noteDao.saveOrUpdate(date, lessonNum, subject, text, imagePath, completed);
+}
+public List<String> getDistinctSubjectsForGroup(String groupName) {
+return scheduleDao.extractDistinctSubjectsForGroup(groupName);
 }
 public void deleteNote(String date, int lessonNum) {
 noteDao.delete(date, lessonNum);

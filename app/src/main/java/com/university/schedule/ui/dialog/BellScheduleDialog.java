@@ -32,10 +32,15 @@ public final class BellScheduleDialog {
         TabLayout tabLayout = view.findViewById(R.id.tabBellSchedule);
         LinearLayout llRows = view.findViewById(R.id.llBellRows);
         View btnClose = view.findViewById(R.id.btnCloseBell);
+        View btnCloseHeader = view.findViewById(R.id.btnCloseBellHeader);
 
         AlertDialog dialog = new MaterialAlertDialogBuilder(context)
                 .setView(view)
                 .create();
+
+        if (btnCloseHeader != null) {
+            btnCloseHeader.setOnClickListener(v -> dialog.dismiss());
+        }
 
         int todayDow = DateUtils.toScheduleDayOfWeek(DateUtils.todayMoscow());
         boolean isTodaySaturday = (todayDow == 6);
@@ -58,6 +63,13 @@ public final class BellScheduleDialog {
 
         btnClose.setOnClickListener(v -> dialog.dismiss());
         dialog.show();
+
+        if (dialog.getWindow() != null) {
+            android.util.DisplayMetrics dm = context.getResources().getDisplayMetrics();
+            int h = (int) (dm.heightPixels * 0.82);
+            int w = (int) (dm.widthPixels * 0.92);
+            dialog.getWindow().setLayout(w, h);
+        }
     }
 
     private static void renderRows(Context context, LinearLayout container, boolean isSaturday) {

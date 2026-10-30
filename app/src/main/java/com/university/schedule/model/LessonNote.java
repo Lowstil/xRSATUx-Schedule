@@ -6,6 +6,7 @@ public class LessonNote {
     private int lessonNumber;
     private String subjectName;
     private String noteText;
+    private String imagePath;
     private boolean isCompleted;
     private String createdAt;
 
@@ -13,11 +14,16 @@ public class LessonNote {
     }
 
     public LessonNote(long id, String date, int lessonNumber, String subjectName, String noteText, boolean isCompleted, String createdAt) {
+        this(id, date, lessonNumber, subjectName, noteText, null, isCompleted, createdAt);
+    }
+
+    public LessonNote(long id, String date, int lessonNumber, String subjectName, String noteText, String imagePath, boolean isCompleted, String createdAt) {
         this.id = id;
         this.date = date;
         this.lessonNumber = lessonNumber;
         this.subjectName = subjectName;
         this.noteText = noteText;
+        this.imagePath = imagePath;
         this.isCompleted = isCompleted;
         this.createdAt = createdAt;
     }
@@ -32,6 +38,8 @@ public class LessonNote {
     public void setSubjectName(String subjectName) { this.subjectName = subjectName; }
     public String getNoteText() { return noteText; }
     public void setNoteText(String noteText) { this.noteText = noteText; }
+    public String getImagePath() { return imagePath; }
+    public void setImagePath(String imagePath) { this.imagePath = imagePath; }
     public boolean isCompleted() { return isCompleted; }
     public void setCompleted(boolean completed) { isCompleted = completed; }
     public String getCreatedAt() { return createdAt; }

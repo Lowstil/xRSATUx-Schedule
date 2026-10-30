@@ -56,6 +56,14 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         db.execSQL(ScheduleContract.SQL_DELETE_HOLIDAYS);
         db.execSQL(ScheduleContract.SQL_DELETE_TRANSFERS);
         onCreate(db);
+        if (oldVersion < 4) {
+            try {
+                db.execSQL("ALTER TABLE " + ScheduleContract.NoteEntry.TABLE_NAME +
+                        " ADD COLUMN " + ScheduleContract.NoteEntry.COLUMN_IMAGE_PATH + " TEXT");
+            } catch (Exception e) {
+                Log.w(TAG, "Колонка image_path уже существует или не может быть добавлена: " + e.getMessage());
+            }
+        }
     }
 
     @Override

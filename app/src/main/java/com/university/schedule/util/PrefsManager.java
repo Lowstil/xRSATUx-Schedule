@@ -52,6 +52,14 @@ public class PrefsManager {
     public static final String PREF_REMINDERS_ENABLED = "reminders_enabled";
     public static final String PREF_REMINDERS_MINUTES = "reminders_minutes";
     public static final String PREF_MORNING_DIGEST_ENABLED = "morning_digest_enabled";
+    public static final String PREF_LAST_NOTIFIED_KEY = "last_notified_lesson_key";
+
+    public String getLastNotifiedLessonKey() {
+        return prefs.getString(PREF_LAST_NOTIFIED_KEY, "");
+    }
+    public void setLastNotifiedLessonKey(String key) {
+        prefs.edit().putString(PREF_LAST_NOTIFIED_KEY, key != null ? key : "").apply();
+    }
 
     public boolean isRemindersEnabled() {
         return prefs.getBoolean(PREF_REMINDERS_ENABLED, true);
