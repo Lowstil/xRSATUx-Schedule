@@ -8,6 +8,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.view.WindowManager;
 import android.widget.ImageButton;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -84,6 +85,8 @@ public class AttendanceDialog {
             int height = (int) (context.getResources().getDisplayMetrics().heightPixels * 0.88);
             window.setLayout(width, height);
             window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            window.setDimAmount(0.70f);
         }
     }
 
@@ -107,7 +110,7 @@ public class AttendanceDialog {
         }
 
         tvOverallSummary.setText("Посещено: " + overall.attendedCount + " из " + overall.totalPlanned
-                + " пар · Пропусков: " + overall.missedCount);
+                + " пар · " + AttendanceManager.formatSkips(overall.missedCount));
 
         if (subjects.isEmpty()) {
             rvSubjects.setVisibility(View.GONE);
@@ -169,13 +172,12 @@ public class AttendanceDialog {
             }
 
             String details = "Посещено " + sa.attendedCount + " из " + sa.totalPlanned
-                    + " · " + sa.missedCount + " " + AttendanceManager.formatSkips(sa.missedCount);
+                    + " · " + AttendanceManager.formatSkips(sa.missedCount);
             holder.tvDetails.setText(details);
 
             if (sa.hasWarning()) {
                 holder.tvWarningBadge.setVisibility(View.VISIBLE);
-                holder.tvWarningBadge.setText("🟡 Внимание: уже " + sa.missedCount + " "
-                        + AttendanceManager.formatSkips(sa.missedCount) + ", пора ходить!");
+                holder.tvWarningBadge.setText("🟡 Внимание: уже " + AttendanceManager.formatSkips(sa.missedCount) + ", пора ходить!");
             } else {
                 holder.tvWarningBadge.setVisibility(View.GONE);
             }

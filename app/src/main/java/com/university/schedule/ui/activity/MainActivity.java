@@ -8,6 +8,9 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.ColorDrawable;
+import android.view.Window;
+import android.view.WindowManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -22,6 +25,8 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
+import android.widget.ImageButton;
+import com.google.android.material.button.MaterialButton;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -545,43 +550,100 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showSkipLessonDialog(ScheduleItem item, LocalDate date) {
+        showAttendanceMarkDialog(item, date);
+    }
+
+    private void showAttendanceMarkDialog(ScheduleItem item, LocalDate date) {
         if (date == null || item == null) return;
-        boolean isSkipped = skippedLessonsManager.isLessonSkipped(date, item.getLessonNumber(), item.getSubjectName());
-        String desc = item.getLessonNumber() + " пара · " + DateUtils.formatDisplayDate(date);
-        if (item.getRoom() != null && !item.getRoom().isEmpty()) {
-            desc += " · ауд. " + item.getRoom();
+        View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_mark_lesson_attendance, null);
+
+        TextView tvSubject = dialogView.findViewById(R.id.tvMarkLessonSubject);
+        TextView tvDetails = dialogView.findViewById(R.id.tvMarkLessonDetails);
+        TextView tvDate = dialogView.findViewById(R.id.tvMarkLessonDate);
+        TextView tvStatus = dialogView.findViewById(R.id.tvCurrentStatusBadge);
+        ImageButton btnClose = dialogView.findViewById(R.id.btnCloseMarkDialog);
+        View cardAttended = dialogView.findViewById(R.id.cardMarkAttended);
+        TextView tvBtnAttendedTitle = dialogView.findViewById(R.id.tvBtnAttendedTitle);
+        View cardSkipped = dialogView.findViewById(R.id.cardMarkSkipped);
+        MaterialButton btnReset = dialogView.findViewById(R.id.btnResetMark);
+
+        tvSubject.setText(item.getSubjectName());
+        int dow = DateUtils.toScheduleDayOfWeek(date);
+        String timeStr = Constants.getLessonTimeLabel(dow, item.getLessonNumber());
+        String roomStr = (item.getRoom() != null && !item.getRoom().isEmpty()) ? " · ауд. " + item.getRoom() : "";
+        tvDetails.setText(item.getLessonNumber() + " пара · " + timeStr + roomStr);
+        tvDate.setText(DateUtils.formatDisplayDate(date));
+
+        boolean isFuture = date.isAfter(DateUtils.todayMoscow());
+        if (tvBtnAttendedTitle != null) {
+            tvBtnAttendedTitle.setText(isFuture ? "Пойду на пару" : "Посетил пару");
         }
 
-        if (isSkipped) {
-            new MaterialAlertDialogBuilder(this)
-                    .setTitle("Вернуть пару в расписание?")
-                    .setMessage(item.getSubjectName() + "\n" + desc + "\n\nВы ранее отметили, что не пойдёте на эту пару. Вернуть её и включить напоминания?")
-                    .setPositiveButton("Пойду на пару", (dialog, which) -> {
-                        skippedLessonsManager.unmarkLessonSkipped(date, item.getLessonNumber(), item.getSubjectName());
-                        if (attendanceManager != null) attendanceManager.invalidateCache();
-                        adapter.notifyDataSetChanged();
-                        updateClock();
-                        WidgetUpdateHelper.updateAllWidgets(this);
-                        ReminderScheduler.rescheduleAll(this);
-                        Toast.makeText(this, "Пара возвращена в расписание", Toast.LENGTH_SHORT).show();
-                    })
-                    .setNegativeButton("Отмена", null)
-                    .show();
+        SkippedLessonsManager.AttendanceStatus currentStatus = skippedLessonsManager.getStatus(date, item.getLessonNumber(), item.getSubjectName());
+        if (currentStatus == SkippedLessonsManager.AttendanceStatus.ATTENDED) {
+            tvStatus.setText(isFuture ? "🟢 Отмечено: Пойду" : "🟢 Отмечено: Посещено");
+            tvStatus.setTextColor(ContextCompat.getColor(this, R.color.badge_attended_text));
+            btnReset.setVisibility(View.VISIBLE);
+        } else if (currentStatus == SkippedLessonsManager.AttendanceStatus.SKIPPED) {
+            tvStatus.setText("🔴 Отмечено: Н-ка (пропуск)");
+            tvStatus.setTextColor(ContextCompat.getColor(this, R.color.badge_nka_text));
+            btnReset.setVisibility(View.VISIBLE);
         } else {
-            new MaterialAlertDialogBuilder(this)
-                    .setTitle("Не пойду на пару")
-                    .setMessage(item.getSubjectName() + "\n" + desc + "\n\nОтметить эту пару как пропущенную? Она будет зачёркнута, а напоминания по ней отключены.")
-                    .setPositiveButton("Не пойду", (dialog, which) -> {
-                        skippedLessonsManager.markLessonSkipped(date, item.getLessonNumber(), item.getSubjectName());
-                        if (attendanceManager != null) attendanceManager.invalidateCache();
-                        adapter.notifyDataSetChanged();
-                        updateClock();
-                        WidgetUpdateHelper.updateAllWidgets(this);
-                        ReminderScheduler.rescheduleAll(this);
-                        Toast.makeText(this, "Пара отмечена: не пойду", Toast.LENGTH_SHORT).show();
-                    })
-                    .setNegativeButton("Отмена", null)
-                    .show();
+            tvStatus.setText("⚪ Не отмечено");
+            tvStatus.setTextColor(ContextCompat.getColor(this, R.color.text_secondary));
+            btnReset.setVisibility(View.GONE);
+        }
+
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setView(dialogView)
+                .create();
+
+        if (btnClose != null) {
+            btnClose.setOnClickListener(v -> dialog.dismiss());
+        }
+
+        cardAttended.setOnClickListener(v -> {
+            skippedLessonsManager.markAttended(date, item.getLessonNumber(), item.getSubjectName());
+            if (attendanceManager != null) attendanceManager.invalidateCache();
+            adapter.notifyDataSetChanged();
+            updateClock();
+            WidgetUpdateHelper.updateAllWidgets(this);
+            ReminderScheduler.rescheduleAll(this);
+            Toast.makeText(this, isFuture ? "Отмечено: Пойду на пару" : "Отмечено: Пара посещена", Toast.LENGTH_SHORT).show();
+            dialog.dismiss();
+        });
+
+        cardSkipped.setOnClickListener(v -> {
+            skippedLessonsManager.markSkipped(date, item.getLessonNumber(), item.getSubjectName());
+            if (attendanceManager != null) attendanceManager.invalidateCache();
+            adapter.notifyDataSetChanged();
+            updateClock();
+            WidgetUpdateHelper.updateAllWidgets(this);
+            ReminderScheduler.rescheduleAll(this);
+            Toast.makeText(this, "Отмечено: Н-ка (пропуск)", Toast.LENGTH_SHORT).show();
+            dialog.dismiss();
+        });
+
+        btnReset.setOnClickListener(v -> {
+            skippedLessonsManager.clearStatus(date, item.getLessonNumber(), item.getSubjectName());
+            if (attendanceManager != null) attendanceManager.invalidateCache();
+            adapter.notifyDataSetChanged();
+            updateClock();
+            WidgetUpdateHelper.updateAllWidgets(this);
+            ReminderScheduler.rescheduleAll(this);
+            Toast.makeText(this, "Отметка сброшена", Toast.LENGTH_SHORT).show();
+            dialog.dismiss();
+        });
+
+        dialog.show();
+
+        Window window = dialog.getWindow();
+        if (window != null) {
+            int width = (int) (getResources().getDisplayMetrics().widthPixels * 0.92);
+            window.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT);
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            window.setDimAmount(0.65f);
         }
     }
 

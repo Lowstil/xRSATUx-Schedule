@@ -206,6 +206,7 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
         // Проверка: отмечен ли точечный пропуск пары ("Не пойду")
         boolean isSkipped = (skippedLessonsManager != null && dayDate != null
                 && skippedLessonsManager.isSkipped(dayDate.toString(), n, it.getSubjectName()));
+        boolean isAttended = (skippedLessonsManager != null && dayDate != null && skippedLessonsManager.isAttended(dayDate.toString(), n, it.getSubjectName()));
 
         if (it.isCancelled()) {
             h.tvSubject.setPaintFlags(h.tvSubject.getPaintFlags() | Paint.STRIKE_THRU_TEXT_FLAG);
@@ -217,11 +218,13 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
             h.tvTransferNote.setTextColor(cc);
             h.tvExemptBadge.setVisibility(View.GONE);
             h.tvSkippedBadge.setVisibility(View.GONE);
+            if (h.tvAttendedBadge != null) h.tvAttendedBadge.setVisibility(View.GONE);
         } else if (isExempt) {
             h.tvSubject.setPaintFlags(h.tvSubject.getPaintFlags() | Paint.STRIKE_THRU_TEXT_FLAG);
             h.itemView.setAlpha(0.55f);
             h.tvTransferNote.setVisibility(View.GONE);
             h.tvSkippedBadge.setVisibility(View.GONE);
+            if (h.tvAttendedBadge != null) h.tvAttendedBadge.setVisibility(View.GONE);
             h.tvExemptBadge.setVisibility(View.VISIBLE);
             int exemptColor = ContextCompat.getColor(ctx, R.color.badge_exempt_text);
             h.tvExemptBadge.setBackground(tintedRound(ctx, exemptColor, boxAlpha, 6));
@@ -231,15 +234,32 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
             h.itemView.setAlpha(0.55f);
             h.tvTransferNote.setVisibility(View.GONE);
             h.tvExemptBadge.setVisibility(View.GONE);
+            if (h.tvAttendedBadge != null) h.tvAttendedBadge.setVisibility(View.GONE);
             h.tvSkippedBadge.setVisibility(View.VISIBLE);
-            int skipColor = ContextCompat.getColor(ctx, R.color.badge_skipped_text);
-            h.tvSkippedBadge.setBackground(tintedRound(ctx, skipColor, boxAlpha, 6));
-            h.tvSkippedBadge.setTextColor(skipColor);
+            h.tvSkippedBadge.setText("🔴 Н-ка");
+            int nkaColor = ContextCompat.getColor(ctx, R.color.badge_nka_text);
+            h.tvSkippedBadge.setBackground(tintedRound(ctx, nkaColor, boxAlpha, 6));
+            h.tvSkippedBadge.setTextColor(nkaColor);
+        } else if (isAttended) {
+            h.tvSubject.setPaintFlags(h.tvSubject.getPaintFlags() & ~Paint.STRIKE_THRU_TEXT_FLAG);
+            h.itemView.setAlpha(1f);
+            h.tvTransferNote.setVisibility(View.GONE);
+            h.tvExemptBadge.setVisibility(View.GONE);
+            h.tvSkippedBadge.setVisibility(View.GONE);
+            if (h.tvAttendedBadge != null) {
+                h.tvAttendedBadge.setVisibility(View.VISIBLE);
+                boolean isFutureDay = dayDate != null && dayDate.isAfter(DateUtils.todayMoscow());
+                h.tvAttendedBadge.setText(isFutureDay ? "✓ Пойду" : "✓ Посещено");
+                int attendedColor = ContextCompat.getColor(ctx, R.color.badge_attended_text);
+                h.tvAttendedBadge.setBackground(tintedRound(ctx, attendedColor, boxAlpha, 6));
+                h.tvAttendedBadge.setTextColor(attendedColor);
+            }
         } else {
             h.tvSubject.setPaintFlags(h.tvSubject.getPaintFlags() & ~Paint.STRIKE_THRU_TEXT_FLAG);
             h.itemView.setAlpha(1f);
             h.tvExemptBadge.setVisibility(View.GONE);
             h.tvSkippedBadge.setVisibility(View.GONE);
+            if (h.tvAttendedBadge != null) h.tvAttendedBadge.setVisibility(View.GONE);
             if (it.isTransferred()) {
                 int tcColor = dark ? TRANSFER_DARK : TRANSFER_LIGHT;
                 h.tvTransferNote.setVisibility(View.VISIBLE);
@@ -545,7 +565,7 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
         TextView tvNoteText;
         TextView tvLessonNumber, tvTimeStart, tvTimeEnd, tvSubject, tvLessonType,
                  tvTeacher, tvBuilding, tvRoom, tvGroups, tvWeekRange, tvTransferNote,
-                 tvSkippedBadge, tvExemptBadge, tvAttendanceWarning, tvState;
+                 tvSkippedBadge, tvAttendedBadge, tvExemptBadge, tvAttendanceWarning, tvState;
 
         ViewHolder(@NonNull View v) {
             super(v);
@@ -574,6 +594,7 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
             tvWeekRange              = v.findViewById(R.id.tvWeekRange);
             tvTransferNote           = v.findViewById(R.id.tvTransferNote);
             tvSkippedBadge           = v.findViewById(R.id.tvSkippedBadge);
+            tvAttendedBadge      = v.findViewById(R.id.tvAttendedBadge);
             tvExemptBadge            = v.findViewById(R.id.tvExemptBadge);
             tvAttendanceWarning      = v.findViewById(R.id.tvAttendanceWarning);
         }
