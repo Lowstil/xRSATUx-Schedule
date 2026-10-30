@@ -25,17 +25,27 @@ import com.university.schedule.util.Constants;
 import com.university.schedule.util.DateUtils;
 import com.university.schedule.util.RoomFormatter;
 import com.university.schedule.util.ScheduleClock;
+import com.university.schedule.util.SkippedLessonsManager;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.ViewHolder> {
     public interface OnLessonClickListener {
         void onLessonClicked(ScheduleItem item, LocalDate date, LessonNote existingNote);
     }
 
+    public interface OnLessonLongClickListener {
+        void onLessonLongClicked(ScheduleItem item, LocalDate date);
+    }
+
+    private static final DateTimeFormatter TF = DateTimeFormatter.ofPattern("H:mm");
     private static final float BOX_ALPHA_LIGHT = 0.20f;
     private static final float BOX_ALPHA_DARK = 0.28f;
     private static final float ROOM_ALPHA_LIGHT = 0.14f;
@@ -56,6 +66,9 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
     private ScheduleClock.State clockState;
     private Map<Integer, LessonNote> notesMap = new HashMap<>();
     private OnLessonClickListener lessonClickListener;
+    private OnLessonLongClickListener lessonLongClickListener;
+    private Set<String> excludedSubjects = new HashSet<>();
+    private SkippedLessonsManager skippedLessonsManager;
 
     public DayScheduleAdapter(List<ScheduleItem> lessons) {
         this.lessons = lessons;
@@ -65,6 +78,10 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
         this.lessonClickListener = l;
     }
 
+    public void setOnLessonLongClickListener(OnLessonLongClickListener l) {
+        this.lessonLongClickListener = l;
+    }
+
     public void updateData(List<ScheduleItem> n) {
         this.lessons = n;
         notifyDataSetChanged();
@@ -72,6 +89,16 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
 
     public void setNotes(Map<Integer, LessonNote> notes) {
         this.notesMap = (notes != null) ? notes : new HashMap<>();
+        notifyDataSetChanged();
+    }
+
+    public void setExcludedSubjects(Set<String> subjects) {
+        this.excludedSubjects = subjects != null ? subjects : new HashSet<>();
+        notifyDataSetChanged();
+    }
+
+    public void setSkippedLessonsManager(SkippedLessonsManager m) {
+        this.skippedLessonsManager = m;
         notifyDataSetChanged();
     }
 
@@ -158,6 +185,7 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
         }
 
         h.tvOnline.setVisibility(it.isOnline() ? View.VISIBLE : View.GONE);
+
         String spec = it.getWeekSpec();
         if (spec != null && !spec.isEmpty() && !"1-18".equals(spec)) {
             h.tvWeekRange.setText("недели " + spec);
@@ -165,6 +193,14 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
         } else {
             h.tvWeekRange.setVisibility(View.GONE);
         }
+
+        // Проверка: исключён ли предмет для группы (перезачёт)
+        boolean isExempt = (excludedSubjects != null && it.getSubjectName() != null
+                && excludedSubjects.contains(it.getSubjectName().trim()));
+
+        // Проверка: отмечен ли точечный пропуск пары ("Не пойду")
+        boolean isSkipped = (skippedLessonsManager != null && dayDate != null
+                && skippedLessonsManager.isSkipped(dayDate.toString(), n, it.getSubjectName()));
 
         if (it.isCancelled()) {
             h.tvSubject.setPaintFlags(h.tvSubject.getPaintFlags() | Paint.STRIKE_THRU_TEXT_FLAG);
@@ -174,9 +210,31 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
             h.tvTransferNote.setText(it.getTransferNote() != null ? it.getTransferNote() : "Перенесено");
             h.tvTransferNote.setBackground(tintedRound(ctx, cc, boxAlpha, 6));
             h.tvTransferNote.setTextColor(cc);
+            h.tvExemptBadge.setVisibility(View.GONE);
+            h.tvSkippedBadge.setVisibility(View.GONE);
+        } else if (isExempt) {
+            h.tvSubject.setPaintFlags(h.tvSubject.getPaintFlags() | Paint.STRIKE_THRU_TEXT_FLAG);
+            h.itemView.setAlpha(0.55f);
+            h.tvTransferNote.setVisibility(View.GONE);
+            h.tvSkippedBadge.setVisibility(View.GONE);
+            h.tvExemptBadge.setVisibility(View.VISIBLE);
+            int exemptColor = ContextCompat.getColor(ctx, R.color.badge_exempt_text);
+            h.tvExemptBadge.setBackground(tintedRound(ctx, exemptColor, boxAlpha, 6));
+            h.tvExemptBadge.setTextColor(exemptColor);
+        } else if (isSkipped) {
+            h.tvSubject.setPaintFlags(h.tvSubject.getPaintFlags() | Paint.STRIKE_THRU_TEXT_FLAG);
+            h.itemView.setAlpha(0.55f);
+            h.tvTransferNote.setVisibility(View.GONE);
+            h.tvExemptBadge.setVisibility(View.GONE);
+            h.tvSkippedBadge.setVisibility(View.VISIBLE);
+            int skipColor = ContextCompat.getColor(ctx, R.color.badge_skipped_text);
+            h.tvSkippedBadge.setBackground(tintedRound(ctx, skipColor, boxAlpha, 6));
+            h.tvSkippedBadge.setTextColor(skipColor);
         } else {
             h.tvSubject.setPaintFlags(h.tvSubject.getPaintFlags() & ~Paint.STRIKE_THRU_TEXT_FLAG);
             h.itemView.setAlpha(1f);
+            h.tvExemptBadge.setVisibility(View.GONE);
+            h.tvSkippedBadge.setVisibility(View.GONE);
             if (it.isTransferred()) {
                 int tcColor = dark ? TRANSFER_DARK : TRANSFER_LIGHT;
                 h.tvTransferNote.setVisibility(View.VISIBLE);
@@ -205,12 +263,92 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
                 h.tvNoteText.setTextColor(ContextCompat.getColor(ctx, R.color.text_primary));
                 h.ivNoteIcon.setColorFilter(ContextCompat.getColor(ctx, R.color.accent));
             }
+            if (noteItem.getImagePath() != null && !noteItem.getImagePath().isEmpty()
+                    && new java.io.File(noteItem.getImagePath()).exists()) {
+                h.ivNotePhotoIcon.setVisibility(View.VISIBLE);
+            } else {
+                h.ivNotePhotoIcon.setVisibility(View.GONE);
+            }
         } else {
             h.noteBadge.setVisibility(View.GONE);
+            h.ivNotePhotoIcon.setVisibility(View.GONE);
         }
 
-        boolean isCurrent = !it.isCancelled() && matchesKey(currentKey, it);
-        boolean isNext = !it.isCancelled() && !isCurrent && matchesKey(nextKey, it);
+        // Расчёт статусов "Идёт сейчас" и "Следующая пара"
+        LocalDate today = DateUtils.todayMoscow();
+        LocalTime now = DateUtils.nowTimeMoscow();
+        boolean isToday = dayDate != null && dayDate.equals(today);
+        boolean isActive = !it.isCancelled() && !isExempt && !isSkipped;
+
+        boolean isCurrent = false;
+        boolean isNext = false;
+        ScheduleClock.LessonProgress lessonProg = null;
+        int minsUntilNext = -1;
+        boolean isBreakBeforeNext = false;
+
+        if (isActive && isToday && n >= 1 && n <= t_arr.length) {
+            LocalTime start = LocalTime.parse(t_arr[n - 1][0], TF);
+            LocalTime end = LocalTime.parse(t_arr[n - 1][1], TF);
+
+            if (!now.isBefore(start) && !now.isAfter(end)) {
+                isCurrent = true;
+                lessonProg = ScheduleClock.computeLessonProgress(start, end, now);
+            } else if (now.isBefore(start)) {
+                // Ищем, является ли эта пара первой активной после текущего момента
+                boolean hasEarlierActive = false;
+                ScheduleItem prevActiveLesson = null;
+                for (ScheduleItem check : lessons) {
+                    if (check == it) break;
+                    int cn = check.getLessonNumber();
+                    boolean checkActive = !check.isCancelled()
+                            && !(excludedSubjects != null && check.getSubjectName() != null && excludedSubjects.contains(check.getSubjectName().trim()))
+                            && !(skippedLessonsManager != null && skippedLessonsManager.isSkipped(dayDate.toString(), cn, check.getSubjectName()));
+                    if (checkActive) {
+                        prevActiveLesson = check;
+                        if (cn >= 1 && cn <= t_arr.length) {
+                            LocalTime cStart = LocalTime.parse(t_arr[cn - 1][0], TF);
+                            if (now.isBefore(cStart)) {
+                                hasEarlierActive = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (!hasEarlierActive) {
+                    isNext = true;
+                    minsUntilNext = (int) java.time.Duration.between(now, start).toMinutes();
+
+                    // Проверяем: это перемена перед парой или свободное окно?
+                    // Перемена:
+                    // 1) Сейчас НЕ идёт ни одна пара по общему расписанию звонков
+                    // 2) Предыдущая пара студента уже закончилась
+                    // 3) До начала следующей пары <= 50 мин
+                    boolean duringAnyBell = false;
+                    for (String[] pair : t_arr) {
+                        LocalTime bStart = LocalTime.parse(pair[0], TF);
+                        LocalTime bEnd = LocalTime.parse(pair[1], TF);
+                        if (!now.isBefore(bStart) && !now.isAfter(bEnd)) {
+                            duringAnyBell = true;
+                            break;
+                        }
+                    }
+
+                    if (!duringAnyBell && prevActiveLesson != null && minsUntilNext <= 50) {
+                        int pn = prevActiveLesson.getLessonNumber();
+                        if (pn >= 1 && pn <= t_arr.length) {
+                            LocalTime pEnd = LocalTime.parse(t_arr[pn - 1][1], TF);
+                            if (!now.isBefore(pEnd)) {
+                                isBreakBeforeNext = true;
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (isActive && !isToday) {
+            isNext = matchesKey(nextKey, it);
+        }
+
         Object animTag = h.indicator.getTag();
         if (animTag instanceof ValueAnimator) {
             ((ValueAnimator) animTag).cancel();
@@ -218,24 +356,32 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
         }
         h.indicator.animate().cancel();
 
-        if (isCurrent) {
+        if (isCurrent && lessonProg != null) {
             h.cardView.setCardBackgroundColor(ContextCompat.getColor(ctx, R.color.state_current_bg));
             h.cardView.setStrokeColor(ContextCompat.getColor(ctx, R.color.state_current_accent));
             h.cardView.setStrokeWidth(strokePx(ctx));
             h.stateRow.setVisibility(View.VISIBLE);
 
-            String stateTxt = "Идёт сейчас";
-            if (clockState != null && clockState.minutesLeftInCurrent >= 0) {
-                stateTxt += " (осталось " + clockState.minutesLeftInCurrent + " мин)";
+            h.tvState.setText(lessonProg.statusText);
+            if (lessonProg.stage == 2) {
+                h.tvState.setTextColor(ContextCompat.getColor(ctx, R.color.progress_segment_orange));
+                h.indicator.getBackground().mutate().setTint(ContextCompat.getColor(ctx, R.color.progress_segment_orange));
+            } else {
+                h.tvState.setTextColor(ContextCompat.getColor(ctx, R.color.state_current_text));
+                h.indicator.getBackground().mutate().setTint(ContextCompat.getColor(ctx, R.color.state_current_accent));
             }
-            h.tvState.setText(stateTxt);
-            h.tvState.setTextColor(ContextCompat.getColor(ctx, R.color.state_current_text));
-            h.progressCurrentLesson.setVisibility(View.VISIBLE);
-            h.progressCurrentLesson.setProgress(clockState != null ? clockState.currentProgressPercent : 0);
+
+            // 3-сегментный прогресс-бар (45 мин / 5 мин / 45 мин)
+            h.progressSegmentContainer.setVisibility(View.VISIBLE);
+            h.progressPart1.setMax(lessonProg.part1Max);
+            h.progressPart1.setProgress(lessonProg.part1Progress);
+            h.progressBreak.setMax(lessonProg.breakMax);
+            h.progressBreak.setProgress(lessonProg.breakProgress);
+            h.progressPart2.setMax(lessonProg.part2Max);
+            h.progressPart2.setProgress(lessonProg.part2Progress);
 
             h.indicator.setVisibility(View.VISIBLE);
             h.indicator.setAlpha(1f);
-            h.indicator.getBackground().mutate().setTint(ContextCompat.getColor(ctx, R.color.state_current_accent));
             ValueAnimator va = ValueAnimator.ofFloat(1f, 0.35f);
             va.setDuration(650);
             va.setRepeatMode(ValueAnimator.REVERSE);
@@ -249,13 +395,15 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
             h.cardView.setStrokeWidth(strokePx(ctx));
             h.stateRow.setVisibility(View.VISIBLE);
 
-            String nextTxt = "Следующая";
-            if (clockState != null && clockState.isBreak && clockState.minutesUntilNext >= 0) {
-                nextTxt += " · перемена (до пары " + clockState.minutesUntilNext + " мин)";
+            String nextTxt;
+            if (isToday && minsUntilNext >= 0) {
+                nextTxt = ScheduleClock.formatTimeUntilNext(minsUntilNext, isBreakBeforeNext);
+            } else {
+                nextTxt = "Следующая пара";
             }
             h.tvState.setText(nextTxt);
             h.tvState.setTextColor(ContextCompat.getColor(ctx, R.color.state_next_text));
-            h.progressCurrentLesson.setVisibility(View.GONE);
+            h.progressSegmentContainer.setVisibility(View.GONE);
 
             h.indicator.setVisibility(View.VISIBLE);
             h.indicator.setAlpha(1f);
@@ -264,7 +412,7 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
             h.cardView.setCardBackgroundColor(ContextCompat.getColor(ctx, R.color.surface));
             h.cardView.setStrokeWidth(0);
             h.stateRow.setVisibility(View.GONE);
-            h.progressCurrentLesson.setVisibility(View.GONE);
+            h.progressSegmentContainer.setVisibility(View.GONE);
             h.indicator.setVisibility(View.GONE);
             h.indicator.setAlpha(1f);
         }
@@ -273,6 +421,14 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
             if (lessonClickListener != null) {
                 lessonClickListener.onLessonClicked(it, dayDate, notesMap.get(n));
             }
+        });
+
+        h.itemView.setOnLongClickListener(v -> {
+            if (lessonLongClickListener != null) {
+                lessonLongClickListener.onLessonLongClicked(it, dayDate);
+                return true;
+            }
+            return false;
         });
     }
 
@@ -296,63 +452,64 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
         }
     }
 
-    private static String formatTeacherGroupLabel(String grp) {
+    private String formatTeacherGroupLabel(String grp) {
         if (grp == null || grp.trim().isEmpty()) return "";
-        String label = grp.trim();
-        if (!label.toLowerCase().startsWith("гр")) {
-            return (label.contains(",") || label.contains(" ")) ? "Группы: " + label : "Группа: " + label;
-        }
-        return label;
+        String trimmed = grp.trim();
+        return trimmed.toLowerCase().startsWith("гр.") ? trimmed : ("гр. " + trimmed);
     }
 
-    private static int strokePx(Context c) {
-        return Math.round(STROKE_WIDTH_DP * c.getResources().getDisplayMetrics().density);
-    }
-
-    private GradientDrawable tintedRound(Context c, int color, float alpha, int radiusDp) {
-        float radiusPx = radiusDp * c.getResources().getDisplayMetrics().density;
-        int argb = withAlpha(color, alpha);
-        long key = (((long) argb) << 32) ^ Float.floatToRawIntBits(radiusPx);
+    private Drawable tintedRound(Context ctx, int color, float alpha, int radiusDp) {
+        long key = (((long) color) << 32)
+                ^ (((long) Float.floatToIntBits(alpha)) << 16)
+                ^ radiusDp;
         GradientDrawable cached = drawableCache.get(key);
-        if (cached != null) {
-            Drawable.ConstantState state = cached.getConstantState();
-            if (state != null) return (GradientDrawable) state.newDrawable(c.getResources()).mutate();
-        }
-        GradientDrawable g = new GradientDrawable();
-        g.setShape(GradientDrawable.RECTANGLE);
-        g.setColor(argb);
-        g.setCornerRadius(radiusPx);
-        drawableCache.put(key, g);
-        return g;
+        if (cached != null) return cached;
+        GradientDrawable gd = new GradientDrawable();
+        gd.setShape(GradientDrawable.RECTANGLE);
+        gd.setCornerRadius(radiusDp * ctx.getResources().getDisplayMetrics().density);
+        gd.setColor(withAlpha(color, alpha));
+        drawableCache.put(key, gd);
+        return gd;
     }
 
-    private static int withAlpha(int rgb, float a) {
-        return Color.argb((int) (a * 255f), Color.red(rgb), Color.green(rgb), Color.blue(rgb));
+    private static int withAlpha(int color, float alpha) {
+        int a = Math.round(Color.alpha(color) * alpha);
+        return Color.argb(a, Color.red(color), Color.green(color), Color.blue(color));
+    }
+
+    private static int strokePx(Context ctx) {
+        return Math.round(STROKE_WIDTH_DP * ctx.getResources().getDisplayMetrics().density);
     }
 
     private static boolean isNightMode(Context ctx) {
-        int mode = ctx.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
-        return mode == Configuration.UI_MODE_NIGHT_YES;
+        int night = ctx.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
+        return night == Configuration.UI_MODE_NIGHT_YES;
     }
 
-    private static int typeColor(String t, boolean dark) {
-        if (t == null) return dark ? 0xFFB0B4C4 : 0xFF616161;
-        switch (t) {
-            case "Л": case "оЛ": return dark ? 0xFF8AB4F8 : 0xFF1565C0;
-            case "П": case "оП": return dark ? 0xFF81C995 : 0xFF2E7D32;
-            case "ЛР": return dark ? 0xFFF3A96B : 0xFFEF6C00;
-            case "Экзамен": return dark ? 0xFFF29B95 : 0xFFC62828;
-            default: return dark ? 0xFFB0B4C4 : 0xFF616161;
-        }
+    private static int typeColor(String type, boolean dark) {
+        if (type == null) return dark ? 0xFF8A8E9E : 0xFF616161;
+        String t = type.trim();
+        if (t.equalsIgnoreCase(Constants.LESSON_TYPE_LECTURE) || t.equalsIgnoreCase(Constants.LESSON_TYPE_ONLINE_LECTURE))
+            return dark ? 0xFF5C6BC0 : 0xFF1565C0;
+        if (t.equalsIgnoreCase(Constants.LESSON_TYPE_PRACTICE) || t.equalsIgnoreCase(Constants.LESSON_TYPE_ONLINE_PRACTICE))
+            return dark ? 0xFF66BB6A : 0xFF2E7D32;
+        if (t.equalsIgnoreCase(Constants.LESSON_TYPE_LAB))
+            return dark ? 0xFFFFA726 : 0xFFE65100;
+        if (t.equalsIgnoreCase(Constants.LESSON_TYPE_EXAM))
+            return dark ? 0xFFEF5350 : 0xFFC62828;
+        return dark ? 0xFF8A8E9E : 0xFF616161;
     }
 
-    private static String shortType(String t) {
-        if (t == null) return "";
-        switch (t) {
-            case "Л": return "Л"; case "П": return "П"; case "ЛР": return "ЛР";
-            case "оЛ": return "оЛ"; case "оП": return "оП"; case "Экзамен": return "ЭКЗ";
-            default: return t;
-        }
+    private static String shortType(String type) {
+        if (type == null) return "";
+        String t = type.trim();
+        if (t.equalsIgnoreCase(Constants.LESSON_TYPE_LECTURE)) return "Лекция";
+        if (t.equalsIgnoreCase(Constants.LESSON_TYPE_PRACTICE)) return "Практика";
+        if (t.equalsIgnoreCase(Constants.LESSON_TYPE_LAB)) return "Лабораторная";
+        if (t.equalsIgnoreCase(Constants.LESSON_TYPE_ONLINE_LECTURE)) return "Онлайн-лекция";
+        if (t.equalsIgnoreCase(Constants.LESSON_TYPE_ONLINE_PRACTICE)) return "Онлайн-практика";
+        if (t.equalsIgnoreCase(Constants.LESSON_TYPE_EXAM)) return "Экзамен";
+        return t;
     }
 
     @Override
@@ -362,36 +519,43 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
 
     static class ViewHolder extends RecyclerView.ViewHolder {
         com.google.android.material.card.MaterialCardView cardView;
-        View roomChip, stateRow, indicator, noteBadge;
-        ProgressBar progressCurrentLesson;
-        ImageView ivNoteIcon;
+        View roomChip, stateRow, indicator, noteBadge, progressSegmentContainer;
+        ProgressBar progressPart1, progressBreak, progressPart2;
+        ImageView ivNoteIcon, ivNotePhotoIcon;
         TextView tvNoteText;
         TextView tvLessonNumber, tvTimeStart, tvTimeEnd, tvSubject, tvLessonType,
-                 tvTeacher, tvBuilding, tvRoom, tvGroups, tvOnline, tvWeekRange, tvTransferNote, tvState;
+                 tvTeacher, tvBuilding, tvRoom, tvGroups, tvOnline, tvWeekRange, tvTransferNote,
+                 tvSkippedBadge, tvExemptBadge, tvState;
 
         ViewHolder(@NonNull View v) {
             super(v);
-            cardView              = v.findViewById(R.id.cardView);
-            roomChip              = v.findViewById(R.id.roomChip);
-            stateRow              = v.findViewById(R.id.stateRow);
-            indicator             = v.findViewById(R.id.indicator);
-            progressCurrentLesson = v.findViewById(R.id.progressCurrentLesson);
-            noteBadge             = v.findViewById(R.id.noteBadge);
-            ivNoteIcon            = v.findViewById(R.id.ivNoteIcon);
-            tvNoteText            = v.findViewById(R.id.tvNoteText);
-            tvState               = v.findViewById(R.id.tvState);
-            tvLessonNumber        = v.findViewById(R.id.tvLessonNumber);
-            tvTimeStart           = v.findViewById(R.id.tvTimeStart);
-            tvTimeEnd             = v.findViewById(R.id.tvTimeEnd);
-            tvSubject             = v.findViewById(R.id.tvSubject);
-            tvLessonType          = v.findViewById(R.id.tvLessonType);
-            tvTeacher             = v.findViewById(R.id.tvTeacher);
-            tvBuilding            = v.findViewById(R.id.tvBuilding);
-            tvRoom                = v.findViewById(R.id.tvRoom);
-            tvGroups              = v.findViewById(R.id.tvGroups);
-            tvOnline              = v.findViewById(R.id.tvOnline);
-            tvWeekRange           = v.findViewById(R.id.tvWeekRange);
-            tvTransferNote        = v.findViewById(R.id.tvTransferNote);
+            cardView                 = v.findViewById(R.id.cardView);
+            roomChip                 = v.findViewById(R.id.roomChip);
+            stateRow                 = v.findViewById(R.id.stateRow);
+            indicator                = v.findViewById(R.id.indicator);
+            progressSegmentContainer = v.findViewById(R.id.progressSegmentContainer);
+            progressPart1            = v.findViewById(R.id.progressPart1);
+            progressBreak            = v.findViewById(R.id.progressBreak);
+            progressPart2            = v.findViewById(R.id.progressPart2);
+            noteBadge                = v.findViewById(R.id.noteBadge);
+            ivNoteIcon               = v.findViewById(R.id.ivNoteIcon);
+            ivNotePhotoIcon          = v.findViewById(R.id.ivNotePhotoIcon);
+            tvNoteText               = v.findViewById(R.id.tvNoteText);
+            tvState                  = v.findViewById(R.id.tvState);
+            tvLessonNumber           = v.findViewById(R.id.tvLessonNumber);
+            tvTimeStart              = v.findViewById(R.id.tvTimeStart);
+            tvTimeEnd                = v.findViewById(R.id.tvTimeEnd);
+            tvSubject                = v.findViewById(R.id.tvSubject);
+            tvLessonType             = v.findViewById(R.id.tvLessonType);
+            tvTeacher                = v.findViewById(R.id.tvTeacher);
+            tvBuilding               = v.findViewById(R.id.tvBuilding);
+            tvRoom                   = v.findViewById(R.id.tvRoom);
+            tvGroups                 = v.findViewById(R.id.tvGroups);
+            tvOnline                 = v.findViewById(R.id.tvOnline);
+            tvWeekRange              = v.findViewById(R.id.tvWeekRange);
+            tvTransferNote           = v.findViewById(R.id.tvTransferNote);
+            tvSkippedBadge           = v.findViewById(R.id.tvSkippedBadge);
+            tvExemptBadge            = v.findViewById(R.id.tvExemptBadge);
         }
     }
 }

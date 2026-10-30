@@ -1,8 +1,15 @@
 package com.university.schedule.ui.activity;
 
+import android.Manifest;
+import android.app.Dialog;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -10,14 +17,18 @@ import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.HorizontalScrollView;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
@@ -45,9 +56,15 @@ import com.university.schedule.util.AppError;
 import com.university.schedule.util.Constants;
 import com.university.schedule.util.DateUtils;
 import com.university.schedule.util.EdgeToEdgeCompat;
+import com.university.schedule.util.ExcludedSubjectsManager;
 import com.university.schedule.util.FavoritesManager;
 import com.university.schedule.util.ScheduleClock;
+import com.university.schedule.util.SkippedLessonsManager;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -57,6 +74,17 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
+
+    private interface PhotoPickCallback {
+        void onPhotoReady(String path);
+    }
+
+    private PhotoPickCallback activePhotoCallback;
+    private ActivityResultLauncher<String> pickPhotoLauncher;
+    private ActivityResultLauncher<String> requestPermissionLauncher;
+
+    private ExcludedSubjectsManager excludedSubjectsManager;
+    private SkippedLessonsManager skippedLessonsManager;
 
     private Toolbar toolbar;
     private TabLayout tabLayout;
@@ -150,8 +178,46 @@ public class MainActivity extends AppCompatActivity {
 
         toolbarTitleArea.setOnClickListener(v -> showSelectionDialog());
 
+        excludedSubjectsManager = new ExcludedSubjectsManager(this);
+        skippedLessonsManager = new SkippedLessonsManager(this);
+
+        requestPermissionLauncher = registerForActivityResult(
+                new ActivityResultContracts.RequestPermission(),
+                isGranted -> {
+                    if (isGranted) {
+                        ReminderScheduler.rescheduleAll(this);
+                    }
+                }
+        );
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS);
+            }
+        }
+
+        pickPhotoLauncher = registerForActivityResult(
+                new ActivityResultContracts.GetContent(),
+                uri -> {
+                    if (uri != null && activePhotoCallback != null) {
+                        ex.execute(() -> {
+                            String localPath = savePickedImageToInternalStorage(uri);
+                            runOnUiThread(() -> {
+                                if (activePhotoCallback != null) {
+                                    activePhotoCallback.onPhotoReady(localPath);
+                                }
+                            });
+                        });
+                    }
+                }
+        );
+
         adapter = new DayScheduleAdapter(new ArrayList<>());
+        adapter.setExcludedSubjects(excludedSubjectsManager.getExcludedSubjects(selName));
+        adapter.setSkippedLessonsManager(skippedLessonsManager);
         adapter.setOnLessonClickListener(this::showLessonNoteDialog);
+        adapter.setOnLessonLongClickListener(this::showSkipLessonDialog);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         recyclerView.setAdapter(adapter);
 
@@ -245,6 +311,9 @@ public class MainActivity extends AppCompatActivity {
                     selType = fav.getType();
                     selName = fav.getName();
                     repo.saveSelection(selType, selName);
+                    if (excludedSubjectsManager != null) {
+                        adapter.setExcludedSubjects(excludedSubjectsManager.getExcludedSubjects(selName));
+                    }
                     tvSelectionName.setText(selName);
                     tvSelectionType.setText(fav.isGroup() ? "Группа" : "Преподаватель");
                     loadWeek();
@@ -283,6 +352,10 @@ public class MainActivity extends AppCompatActivity {
         TextView tvDetails = dialogView.findViewById(R.id.tvNoteDialogDetails);
         EditText etNote = dialogView.findViewById(R.id.etNoteText);
         CheckBox cbCompleted = dialogView.findViewById(R.id.cbNoteCompleted);
+        View cardNotePhoto = dialogView.findViewById(R.id.cardNotePhoto);
+        ImageView ivNotePhotoPreview = dialogView.findViewById(R.id.ivNotePhotoPreview);
+        View btnRemovePhoto = dialogView.findViewById(R.id.btnRemovePhoto);
+        com.google.android.material.button.MaterialButton btnAttachPhoto = dialogView.findViewById(R.id.btnAttachPhoto);
         View btnDelete = dialogView.findViewById(R.id.btnDeleteNote);
         View btnCancel = dialogView.findViewById(R.id.btnCancelNote);
         View btnSave = dialogView.findViewById(R.id.btnSaveNote);
@@ -292,8 +365,23 @@ public class MainActivity extends AppCompatActivity {
         if (item.getRoom() != null && !item.getRoom().isEmpty()) det += " · ауд. " + item.getRoom();
         tvDetails.setText(det);
 
-        if (existingNote != null && existingNote.getNoteText() != null && !existingNote.getNoteText().isEmpty()) {
-            etNote.setText(existingNote.getNoteText());
+        final String[] currentPhotoPath = new String[]{ (existingNote != null) ? existingNote.getImagePath() : null };
+
+        Runnable updatePhotoUi = () -> {
+            if (currentPhotoPath[0] != null && new File(currentPhotoPath[0]).exists()) {
+                cardNotePhoto.setVisibility(View.VISIBLE);
+                displayImageThumb(ivNotePhotoPreview, currentPhotoPath[0]);
+                btnAttachPhoto.setText("Сменить фото");
+            } else {
+                cardNotePhoto.setVisibility(View.GONE);
+                btnAttachPhoto.setText("Прикрепить фото");
+            }
+        };
+
+        boolean hasContent = existingNote != null && ((existingNote.getNoteText() != null && !existingNote.getNoteText().isEmpty())
+                || (existingNote.getImagePath() != null && !existingNote.getImagePath().isEmpty()));
+        if (hasContent) {
+            if (existingNote.getNoteText() != null) etNote.setText(existingNote.getNoteText());
             cbCompleted.setChecked(existingNote.isCompleted());
             cbCompleted.setVisibility(View.VISIBLE);
             btnDelete.setVisibility(View.VISIBLE);
@@ -302,9 +390,27 @@ public class MainActivity extends AppCompatActivity {
             btnDelete.setVisibility(View.GONE);
         }
 
+        updatePhotoUi.run();
+
+        activePhotoCallback = path -> {
+            currentPhotoPath[0] = path;
+            updatePhotoUi.run();
+        };
+
+        btnAttachPhoto.setOnClickListener(v -> pickPhotoLauncher.launch("image/*"));
+        btnRemovePhoto.setOnClickListener(v -> {
+            currentPhotoPath[0] = null;
+            updatePhotoUi.run();
+        });
+        ivNotePhotoPreview.setOnClickListener(v -> {
+            if (currentPhotoPath[0] != null) showFullScreenPhoto(currentPhotoPath[0]);
+        });
+
         AlertDialog dialog = new MaterialAlertDialogBuilder(this)
                 .setView(dialogView)
                 .create();
+
+        dialog.setOnDismissListener(d -> activePhotoCallback = null);
 
         btnCancel.setOnClickListener(v -> dialog.dismiss());
 
@@ -317,10 +423,10 @@ public class MainActivity extends AppCompatActivity {
 
         btnSave.setOnClickListener(v -> {
             String text = etNote.getText().toString().trim();
-            if (text.isEmpty()) {
+            if (text.isEmpty() && currentPhotoPath[0] == null) {
                 repo.deleteNote(date.toString(), item.getLessonNumber());
             } else {
-                repo.saveNote(date.toString(), item.getLessonNumber(), item.getSubjectName(), text, cbCompleted.isChecked());
+                repo.saveNote(date.toString(), item.getLessonNumber(), item.getSubjectName(), text, currentPhotoPath[0], cbCompleted.isChecked());
             }
             adapter.setNotes(repo.getNotesForDate(date.toString()));
             dialog.dismiss();
@@ -328,6 +434,116 @@ public class MainActivity extends AppCompatActivity {
         });
 
         dialog.show();
+    }
+
+    private String savePickedImageToInternalStorage(Uri uri) {
+        try {
+            File dir = new File(getFilesDir(), "notes_photos");
+            if (!dir.exists()) dir.mkdirs();
+            File dest = new File(dir, "photo_" + System.currentTimeMillis() + ".jpg");
+            try (InputStream in = getContentResolver().openInputStream(uri);
+                 OutputStream out = new FileOutputStream(dest)) {
+                if (in == null) return null;
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = in.read(buffer)) != -1) {
+                    out.write(buffer, 0, read);
+                }
+            }
+            return dest.getAbsolutePath();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private int calculateInSampleSize(BitmapFactory.Options options, int reqWidth, int reqHeight) {
+        final int height = options.outHeight;
+        final int width = options.outWidth;
+        int inSampleSize = 1;
+        if (height > reqHeight || width > reqWidth) {
+            final int halfHeight = height / 2;
+            final int halfWidth = width / 2;
+            while ((halfHeight / inSampleSize) >= reqHeight && (halfWidth / inSampleSize) >= reqWidth) {
+                inSampleSize *= 2;
+            }
+        }
+        return inSampleSize;
+    }
+
+    private void displayImageThumb(ImageView iv, String path) {
+        if (path == null || !new File(path).exists()) {
+            iv.setImageDrawable(null);
+            return;
+        }
+        try {
+            BitmapFactory.Options opts = new BitmapFactory.Options();
+            opts.inJustDecodeBounds = true;
+            BitmapFactory.decodeFile(path, opts);
+            opts.inSampleSize = calculateInSampleSize(opts, 480, 360);
+            opts.inJustDecodeBounds = false;
+            Bitmap bmp = BitmapFactory.decodeFile(path, opts);
+            iv.setImageBitmap(bmp);
+        } catch (Throwable t) {
+            iv.setImageDrawable(null);
+        }
+    }
+
+    private void showFullScreenPhoto(String path) {
+        if (path == null || !new File(path).exists()) return;
+        Dialog d = new Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
+        ImageView iv = new ImageView(this);
+        iv.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        try {
+            Bitmap bmp = BitmapFactory.decodeFile(path);
+            if (bmp != null) {
+                iv.setImageBitmap(bmp);
+            } else {
+                return;
+            }
+        } catch (Throwable t) {
+            return;
+        }
+        iv.setOnClickListener(v -> d.dismiss());
+        d.setContentView(iv);
+        d.show();
+    }
+
+    private void showSkipLessonDialog(ScheduleItem item, LocalDate date) {
+        if (date == null || item == null) return;
+        boolean isSkipped = skippedLessonsManager.isLessonSkipped(date, item.getLessonNumber(), item.getSubjectName());
+        String desc = item.getLessonNumber() + " пара · " + DateUtils.formatDisplayDate(date);
+        if (item.getRoom() != null && !item.getRoom().isEmpty()) {
+            desc += " · ауд. " + item.getRoom();
+        }
+
+        if (isSkipped) {
+            new MaterialAlertDialogBuilder(this)
+                    .setTitle("Вернуть пару в расписание?")
+                    .setMessage(item.getSubjectName() + "\n" + desc + "\n\nВы ранее отметили, что не пойдёте на эту пару. Вернуть её и включить напоминания?")
+                    .setPositiveButton("Пойду на пару", (dialog, which) -> {
+                        skippedLessonsManager.unmarkLessonSkipped(date, item.getLessonNumber(), item.getSubjectName());
+                        adapter.notifyDataSetChanged();
+                        updateClock();
+                        ReminderScheduler.rescheduleAll(this);
+                        Toast.makeText(this, "Пара возвращена в расписание", Toast.LENGTH_SHORT).show();
+                    })
+                    .setNegativeButton("Отмена", null)
+                    .show();
+        } else {
+            new MaterialAlertDialogBuilder(this)
+                    .setTitle("Не пойду на пару")
+                    .setMessage(item.getSubjectName() + "\n" + desc + "\n\nОтметить эту пару как пропущенную? Она будет зачёркнута, а напоминания по ней отключены.")
+                    .setPositiveButton("Не пойду", (dialog, which) -> {
+                        skippedLessonsManager.markLessonSkipped(date, item.getLessonNumber(), item.getSubjectName());
+                        adapter.notifyDataSetChanged();
+                        updateClock();
+                        ReminderScheduler.rescheduleAll(this);
+                        Toast.makeText(this, "Пара отмечена: не пойду", Toast.LENGTH_SHORT).show();
+                    })
+                    .setNegativeButton("Отмена", null)
+                    .show();
+        }
     }
 
     private void initWeekForDate(LocalDate today) {
@@ -362,6 +578,10 @@ public class MainActivity extends AppCompatActivity {
             loadWeek();
         }
         updateFavoritesBar();
+        if (excludedSubjectsManager != null) {
+            adapter.setExcludedSubjects(excludedSubjectsManager.getExcludedSubjects(selName));
+            adapter.notifyDataSetChanged();
+        }
         clockHandler.removeCallbacks(clockTick);
         clockHandler.post(clockTick);
         updateLastUpdatedBanner();

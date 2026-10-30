@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.view.View;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -26,12 +27,16 @@ import com.university.schedule.ui.dialog.BellScheduleDialog;
 import com.university.schedule.util.AppError;
 import com.university.schedule.util.DateUtils;
 import com.university.schedule.util.EdgeToEdgeCompat;
+import com.university.schedule.util.ExcludedSubjectsManager;
 import com.university.schedule.util.PrefsManager;
 import com.university.schedule.util.ThemeManager;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -40,12 +45,16 @@ public class SettingsActivity extends AppCompatActivity {
 
     private ScheduleRepository repo;
     private PrefsManager prefs;
+    private ExcludedSubjectsManager excludedManager;
     private final ExecutorService ex = Executors.newSingleThreadExecutor();
     private TextView tvSel, tvSem, tvUpd, tvTransfersUpd;
     private MaterialButton btnRefresh;
     private MaterialButtonToggleGroup toggleTheme;
     private SwitchMaterial switchLessonReminder, switchMorningDigest;
     private MaterialButtonToggleGroup toggleReminderMinutes;
+    private View cardExcludedSubjects;
+    private TextView tvExcludedSubjectsSummary;
+    private MaterialButton btnSelectExcludedSubjects;
     private boolean suppressThemeCallback;
     private boolean suppressReminderCallback;
 
@@ -56,6 +65,7 @@ public class SettingsActivity extends AppCompatActivity {
         EdgeToEdgeCompat.applyEdgeToEdgeInsets(this);
         repo = ScheduleRepository.getInstance(this);
         prefs = new PrefsManager(this);
+        excludedManager = new ExcludedSubjectsManager(this);
 
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
@@ -75,6 +85,10 @@ public class SettingsActivity extends AppCompatActivity {
         switchLessonReminder = findViewById(R.id.switchLessonReminder);
         toggleReminderMinutes = findViewById(R.id.toggleReminderMinutes);
         switchMorningDigest = findViewById(R.id.switchMorningDigest);
+
+        cardExcludedSubjects = findViewById(R.id.cardExcludedSubjects);
+        tvExcludedSubjectsSummary = findViewById(R.id.tvExcludedSubjectsSummary);
+        btnSelectExcludedSubjects = findViewById(R.id.btnSelectExcludedSubjects);
 
         findViewById(R.id.btnChangeSelection).setOnClickListener(v -> {
             Intent i = new Intent(this, SelectionActivity.class);
@@ -105,6 +119,7 @@ public class SettingsActivity extends AppCompatActivity {
 
         setupThemeToggle();
         setupNotificationSettings();
+        setupExcludedSubjects();
         updateInfo();
     }
 
@@ -227,6 +242,70 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onProgress(String m) { }
         }));
+    }
+
+    private void setupExcludedSubjects() {
+        String type = repo.getSelectionType();
+        String groupName = repo.getSelectionName();
+        boolean isGroup = "group".equals(type);
+        if (!isGroup || groupName == null || groupName.isEmpty()) {
+            if (cardExcludedSubjects != null) cardExcludedSubjects.setVisibility(android.view.View.GONE);
+            return;
+        }
+        if (cardExcludedSubjects != null) cardExcludedSubjects.setVisibility(android.view.View.VISIBLE);
+        updateExcludedSummary(groupName);
+
+        if (btnSelectExcludedSubjects != null) {
+            btnSelectExcludedSubjects.setOnClickListener(v -> showExcludedSubjectsDialog(groupName));
+        }
+    }
+
+    private void updateExcludedSummary(String groupName) {
+        if (tvExcludedSubjectsSummary == null) return;
+        Set<String> excluded = excludedManager.getExcludedSubjects(groupName);
+        if (excluded.isEmpty()) {
+            tvExcludedSubjectsSummary.setText("Нет исключённых предметов");
+        } else {
+            tvExcludedSubjectsSummary.setText("Исключено предметов: " + excluded.size() + "\n(будут вычеркнуты в расписании)");
+        }
+    }
+
+    private void showExcludedSubjectsDialog(String groupName) {
+        ex.execute(() -> {
+            List<String> subjects = repo.getDistinctSubjectsForGroup(groupName);
+            runOnUiThread(() -> {
+                if (subjects == null || subjects.isEmpty()) {
+                    Toast.makeText(this, "Предметы группы не найдены. Обновите расписание.", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                CharSequence[] items = subjects.toArray(new CharSequence[0]);
+                Set<String> currentExcluded = excludedManager.getExcludedSubjects(groupName);
+                boolean[] checked = new boolean[items.length];
+                for (int i = 0; i < items.length; i++) {
+                    checked[i] = currentExcluded.contains(items[i].toString());
+                }
+
+                new MaterialAlertDialogBuilder(this)
+                        .setTitle("Вычеркнуть предметы (перезачёт)")
+                        .setMultiChoiceItems(items, checked, (dialog, which, isChecked) -> {
+                            checked[which] = isChecked;
+                        })
+                        .setPositiveButton("Сохранить", (dialog, which) -> {
+                            Set<String> newSet = new HashSet<>();
+                            for (int i = 0; i < checked.length; i++) {
+                                if (checked[i]) {
+                                    newSet.add(items[i].toString());
+                                }
+                            }
+                            excludedManager.setExcludedSubjects(groupName, newSet);
+                            updateExcludedSummary(groupName);
+                            ReminderScheduler.rescheduleAll(this);
+                            Toast.makeText(this, "Настройки перезачёта сохранены", Toast.LENGTH_SHORT).show();
+                        })
+                        .setNegativeButton("Отмена", null)
+                        .show();
+            });
+        });
     }
 
     @Override

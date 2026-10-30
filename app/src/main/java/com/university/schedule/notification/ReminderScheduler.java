@@ -57,6 +57,21 @@ public final class ReminderScheduler {
         LocalTime now = DateUtils.nowTimeMoscow();
 
         NextLesson next = repo.findNextLesson(selName, isGroup, today, now, 8);
+        String lastNotified = prefs.getLastNotifiedLessonKey();
+
+        // Пропускаем пару, если напоминание о ней уже было отправлено
+        int attempts = 0;
+        while (next != null && next.getDate() != null && next.getTimeStart() != null && attempts < 10) {
+            String key = next.getDate().toString() + "#" + next.getLessonNumber() + "#" + next.getSubjectName();
+            if (key.equals(lastNotified)) {
+                LocalTime nextTime = LocalTime.parse(next.getTimeStart(), TF);
+                next = repo.findNextLesson(selName, isGroup, next.getDate(), nextTime, 8);
+                attempts++;
+                continue;
+            }
+            break;
+        }
+
         if (next == null || next.getDate() == null || next.getTimeStart() == null) {
             am.cancel(pi);
             return;
@@ -68,19 +83,33 @@ public final class ReminderScheduler {
             LocalDateTime triggerLdt = LocalDateTime.of(next.getDate(), reminderTime);
             long triggerMillis = triggerLdt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
 
-            if (triggerMillis <= System.currentTimeMillis()) {
-                // Время напоминания уже прошло (например, пара уже через 5 мин, а настройка 15 мин),
-                // но пара еще не началась — ставим напоминание на сейчас (через 1 сек)
-                LocalDateTime lessonStartLdt = LocalDateTime.of(next.getDate(), start);
-                long startMillis = lessonStartLdt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
-                if (startMillis > System.currentTimeMillis()) {
-                    triggerMillis = System.currentTimeMillis() + 1000L;
+            LocalDateTime lessonStartLdt = LocalDateTime.of(next.getDate(), start);
+            long startMillis = lessonStartLdt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+
+            // Если пара уже началась, переходим к поиску следующей
+            if (startMillis <= System.currentTimeMillis()) {
+                LocalTime afterStart = start.plusMinutes(1);
+                NextLesson subsequent = repo.findNextLesson(selName, isGroup, next.getDate(), afterStart, 8);
+                if (subsequent != null && !subsequent.equals(next)) {
+                    next = subsequent;
+                    start = LocalTime.parse(next.getTimeStart(), TF);
+                    reminderTime = start.minusMinutes(minutesBefore);
+                    triggerLdt = LocalDateTime.of(next.getDate(), reminderTime);
+                    triggerMillis = triggerLdt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
                 } else {
                     am.cancel(pi);
                     return;
                 }
             }
 
+            // Если время напоминания уже прошло (например пара через 5 мин, а настройка 15 мин),
+            // но пара ещё не началась — ставим будильник на прямо сейчас
+            if (triggerMillis <= System.currentTimeMillis()) {
+                triggerMillis = System.currentTimeMillis() + 1000L;
+            }
+
+            String key = next.getDate().toString() + "#" + next.getLessonNumber() + "#" + next.getSubjectName();
+            intent.putExtra("lesson_key", key);
             intent.putExtra("subject", next.getSubjectName());
             intent.putExtra("type", next.getLessonType());
             intent.putExtra("room", next.getRoom());
@@ -102,7 +131,7 @@ public final class ReminderScheduler {
             } else {
                 am.setExact(AlarmManager.RTC_WAKEUP, triggerMillis, exactPi);
             }
-            Log.d(TAG, "Напоминание о паре запланировано на " + triggerLdt);
+            Log.d(TAG, "Напоминание о паре запланировано на " + triggerLdt + " (key=" + key + ")");
         } catch (Exception e) {
             Log.e(TAG, "Ошибка планирования напоминания о паре", e);
         }
