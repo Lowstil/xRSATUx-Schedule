@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/compactWidgetRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_widget"
+    android:gravity="center_vertical"
+    android:orientation="vertical"
+    android:padding="10dp">
+
+    <!-- Верхняя строка: статус/тип пары + время/обратный отсчёт + аудитория -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/tvCompactStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_widget_type_badge"
+            android:paddingStart="6dp"
+            android:paddingTop="2dp"
+            android:paddingEnd="6dp"
+            android:paddingBottom="2dp"
+            android:text="Идёт пара"
+            android:textColor="#81C995"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvCompactTimeCountdown"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="осталось 24 мин"
+            android:textColor="#FFB8C5E8"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/tvCompactRoom"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="ауд. 312"
+            android:textColor="#FFFFFFFF"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Название предмета -->
+    <TextView
+        android:id="@+id/tvCompactSubject"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="3dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:text="Высшая математика"
+        android:textColor="#FFFFFFFF"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+    <!-- Трёхсегментный прогресс-бар пары (45м - 5м - 45м) -->
+    <LinearLayout
+        android:id="@+id/compactProgressContainer"
+        android:layout_width="match_parent"
+        android:layout_height="5dp"
+        android:layout_marginTop="5dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ProgressBar
+            android:id="@+id/compactProgressPart1"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="45"
+            android:max="45"
+            android:progress="45"
+            android:progressDrawable="@drawable/bg_progress_green" />
+
+        <ProgressBar
+            android:id="@+id/compactProgressBreak"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="2dp"
+            android:layout_marginEnd="2dp"
+            android:layout_weight="5"
+            android:max="5"
+            android:progress="0"
+            android:progressDrawable="@drawable/bg_progress_orange" />
+
+        <ProgressBar
+            android:id="@+id/compactProgressPart2"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="45"
+            android:max="45"
+            android:progress="0"
+            android:progressDrawable="@drawable/bg_progress_green" />
+    </LinearLayout>
+
+    <!-- Дополнительная информация для перемены / пустых дней -->
+    <TextView
+        android:id="@+id/tvCompactSubInfo"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:text="Звонок в 10:10"
+        android:textColor="#FF8AB4F8"
+        android:textSize="11sp"
+        android:visibility="gone" />
+
+</LinearLayout>

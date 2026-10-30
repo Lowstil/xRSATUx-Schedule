@@ -21,6 +21,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.university.schedule.R;
 import com.university.schedule.model.LessonNote;
 import com.university.schedule.model.ScheduleItem;
+import com.university.schedule.util.AttendanceManager;
 import com.university.schedule.util.Constants;
 import com.university.schedule.util.DateUtils;
 import com.university.schedule.util.RoomFormatter;
@@ -69,9 +70,15 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
     private OnLessonLongClickListener lessonLongClickListener;
     private Set<String> excludedSubjects = new HashSet<>();
     private SkippedLessonsManager skippedLessonsManager;
+    private AttendanceManager attendanceManager;
 
     public DayScheduleAdapter(List<ScheduleItem> lessons) {
         this.lessons = lessons;
+    }
+
+    public void setAttendanceManager(AttendanceManager m) {
+        this.attendanceManager = m;
+        notifyDataSetChanged();
     }
 
     public void setOnLessonClickListener(OnLessonClickListener l) {
@@ -184,8 +191,6 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
             }
         }
 
-        h.tvOnline.setVisibility(it.isOnline() ? View.VISIBLE : View.GONE);
-
         String spec = it.getWeekSpec();
         if (spec != null && !spec.isEmpty() && !"1-18".equals(spec)) {
             h.tvWeekRange.setText("недели " + spec);
@@ -247,6 +252,21 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
             } else {
                 h.tvTransferNote.setVisibility(View.GONE);
             }
+        }
+
+        if (!isExempt && !isSkipped && !it.isCancelled() && attendanceManager != null) {
+            String warn = attendanceManager.getWarningForSubject(it.getSubjectName());
+            if (warn != null) {
+                h.tvAttendanceWarning.setVisibility(View.VISIBLE);
+                h.tvAttendanceWarning.setText(warn);
+                int warnTxt = ContextCompat.getColor(ctx, R.color.badge_warning_text);
+                h.tvAttendanceWarning.setBackground(tintedRound(ctx, warnTxt, boxAlpha, 6));
+                h.tvAttendanceWarning.setTextColor(warnTxt);
+            } else {
+                h.tvAttendanceWarning.setVisibility(View.GONE);
+            }
+        } else {
+            h.tvAttendanceWarning.setVisibility(View.GONE);
         }
 
         // Отображение личной заметки или ДЗ к паре
@@ -524,8 +544,8 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
         ImageView ivNoteIcon, ivNotePhotoIcon;
         TextView tvNoteText;
         TextView tvLessonNumber, tvTimeStart, tvTimeEnd, tvSubject, tvLessonType,
-                 tvTeacher, tvBuilding, tvRoom, tvGroups, tvOnline, tvWeekRange, tvTransferNote,
-                 tvSkippedBadge, tvExemptBadge, tvState;
+                 tvTeacher, tvBuilding, tvRoom, tvGroups, tvWeekRange, tvTransferNote,
+                 tvSkippedBadge, tvExemptBadge, tvAttendanceWarning, tvState;
 
         ViewHolder(@NonNull View v) {
             super(v);
@@ -551,11 +571,11 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<DayScheduleAdapter.
             tvBuilding               = v.findViewById(R.id.tvBuilding);
             tvRoom                   = v.findViewById(R.id.tvRoom);
             tvGroups                 = v.findViewById(R.id.tvGroups);
-            tvOnline                 = v.findViewById(R.id.tvOnline);
             tvWeekRange              = v.findViewById(R.id.tvWeekRange);
             tvTransferNote           = v.findViewById(R.id.tvTransferNote);
             tvSkippedBadge           = v.findViewById(R.id.tvSkippedBadge);
             tvExemptBadge            = v.findViewById(R.id.tvExemptBadge);
+            tvAttendanceWarning      = v.findViewById(R.id.tvAttendanceWarning);
         }
     }
 }

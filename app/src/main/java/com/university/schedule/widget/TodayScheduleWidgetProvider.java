@@ -99,6 +99,7 @@ PendingIntent pendingIntent = PendingIntent.getActivity(
 context, 0, openApp,
 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 views.setOnClickPendingIntent(R.id.widgetRoot, pendingIntent);
+views.setPendingIntentTemplate(R.id.widgetListView, pendingIntent);
 return views;
 }
 /**

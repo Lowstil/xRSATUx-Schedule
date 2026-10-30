@@ -60,4 +60,8 @@
     <color name="badge_skipped_text">#616161</color>
     <color name="badge_exempt_bg">#EDE7F6</color>
     <color name="badge_exempt_text">#512DA8</color>
+
+    <!-- Бейдж предупреждения о посещаемости -->
+    <color name="badge_warning_bg">#FFF8E1</color>
+    <color name="badge_warning_text">#B45309</color>
 </resources>
