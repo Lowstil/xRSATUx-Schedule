@@ -51,15 +51,19 @@ import com.university.schedule.model.ScheduleItem;
 import com.university.schedule.model.WeekSchedule;
 import com.university.schedule.notification.ReminderScheduler;
 import com.university.schedule.ui.adapter.DayScheduleAdapter;
+import com.university.schedule.ui.dialog.AttendanceDialog;
 import com.university.schedule.ui.dialog.BellScheduleDialog;
 import com.university.schedule.util.AppError;
+import com.university.schedule.util.AttendanceManager;
 import com.university.schedule.util.Constants;
 import com.university.schedule.util.DateUtils;
 import com.university.schedule.util.EdgeToEdgeCompat;
 import com.university.schedule.util.ExcludedSubjectsManager;
 import com.university.schedule.util.FavoritesManager;
+import com.university.schedule.util.PrefsManager;
 import com.university.schedule.util.ScheduleClock;
 import com.university.schedule.util.SkippedLessonsManager;
+import com.university.schedule.widget.WidgetUpdateHelper;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -85,6 +89,7 @@ public class MainActivity extends AppCompatActivity {
 
     private ExcludedSubjectsManager excludedSubjectsManager;
     private SkippedLessonsManager skippedLessonsManager;
+    private AttendanceManager attendanceManager;
 
     private Toolbar toolbar;
     private TabLayout tabLayout;
@@ -180,6 +185,7 @@ public class MainActivity extends AppCompatActivity {
 
         excludedSubjectsManager = new ExcludedSubjectsManager(this);
         skippedLessonsManager = new SkippedLessonsManager(this);
+        attendanceManager = new AttendanceManager(this);
 
         requestPermissionLauncher = registerForActivityResult(
                 new ActivityResultContracts.RequestPermission(),
@@ -190,7 +196,10 @@ public class MainActivity extends AppCompatActivity {
                 }
         );
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        PrefsManager prefs = new PrefsManager(this);
+        if (prefs.isFirstLaunch()) {
+            showWelcomePermissionsDialog(prefs);
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
                     != PackageManager.PERMISSION_GRANTED) {
                 requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS);
@@ -216,6 +225,7 @@ public class MainActivity extends AppCompatActivity {
         adapter = new DayScheduleAdapter(new ArrayList<>());
         adapter.setExcludedSubjects(excludedSubjectsManager.getExcludedSubjects(selName));
         adapter.setSkippedLessonsManager(skippedLessonsManager);
+        adapter.setAttendanceManager(attendanceManager);
         adapter.setOnLessonClickListener(this::showLessonNoteDialog);
         adapter.setOnLessonLongClickListener(this::showSkipLessonDialog);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
@@ -265,6 +275,27 @@ public class MainActivity extends AppCompatActivity {
                     finish();
                 })
                 .setNegativeButton("Отмена", null)
+                .show();
+    }
+
+    private void showWelcomePermissionsDialog(PrefsManager prefs) {
+        new MaterialAlertDialogBuilder(this)
+                .setTitle("Добро пожаловать в РГАТУ!")
+                .setMessage("Для работы напоминаний о парах приложению требуется доступ к уведомлениям:\n\n"
+                        + "• 🔔 Напоминание за 10–15 мин до звонка (с кабинетом и предметом)\n"
+                        + "• 🌅 Утреннее расписание в 07:30\n"
+                        + "• ⚠️ Оповещения об отменах и переносах пар\n\n"
+                        + "Разрешить отправку уведомлений?")
+                .setPositiveButton("Разрешить", (dialog, which) -> {
+                    prefs.setFirstLaunchCompleted(true);
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS);
+                    }
+                })
+                .setNegativeButton("Позже", (dialog, which) -> {
+                    prefs.setFirstLaunchCompleted(true);
+                })
+                .setCancelable(false)
                 .show();
     }
 
@@ -318,6 +349,10 @@ public class MainActivity extends AppCompatActivity {
                     tvSelectionType.setText(fav.isGroup() ? "Группа" : "Преподаватель");
                     loadWeek();
                     updateFavoritesBar();
+                    if (attendanceManager != null) {
+                        attendanceManager.invalidateCache();
+                    }
+                    WidgetUpdateHelper.updateAllWidgets(this);
                     ReminderScheduler.rescheduleAll(this);
                 }
             });
@@ -523,8 +558,10 @@ public class MainActivity extends AppCompatActivity {
                     .setMessage(item.getSubjectName() + "\n" + desc + "\n\nВы ранее отметили, что не пойдёте на эту пару. Вернуть её и включить напоминания?")
                     .setPositiveButton("Пойду на пару", (dialog, which) -> {
                         skippedLessonsManager.unmarkLessonSkipped(date, item.getLessonNumber(), item.getSubjectName());
+                        if (attendanceManager != null) attendanceManager.invalidateCache();
                         adapter.notifyDataSetChanged();
                         updateClock();
+                        WidgetUpdateHelper.updateAllWidgets(this);
                         ReminderScheduler.rescheduleAll(this);
                         Toast.makeText(this, "Пара возвращена в расписание", Toast.LENGTH_SHORT).show();
                     })
@@ -536,8 +573,10 @@ public class MainActivity extends AppCompatActivity {
                     .setMessage(item.getSubjectName() + "\n" + desc + "\n\nОтметить эту пару как пропущенную? Она будет зачёркнута, а напоминания по ней отключены.")
                     .setPositiveButton("Не пойду", (dialog, which) -> {
                         skippedLessonsManager.markLessonSkipped(date, item.getLessonNumber(), item.getSubjectName());
+                        if (attendanceManager != null) attendanceManager.invalidateCache();
                         adapter.notifyDataSetChanged();
                         updateClock();
+                        WidgetUpdateHelper.updateAllWidgets(this);
                         ReminderScheduler.rescheduleAll(this);
                         Toast.makeText(this, "Пара отмечена: не пойду", Toast.LENGTH_SHORT).show();
                     })
@@ -580,8 +619,12 @@ public class MainActivity extends AppCompatActivity {
         updateFavoritesBar();
         if (excludedSubjectsManager != null) {
             adapter.setExcludedSubjects(excludedSubjectsManager.getExcludedSubjects(selName));
-            adapter.notifyDataSetChanged();
         }
+        if (attendanceManager != null) {
+            attendanceManager.invalidateCache();
+        }
+        adapter.notifyDataSetChanged();
+        WidgetUpdateHelper.updateAllWidgets(this);
         clockHandler.removeCallbacks(clockTick);
         clockHandler.post(clockTick);
         updateLastUpdatedBanner();
@@ -735,6 +778,7 @@ public class MainActivity extends AppCompatActivity {
         }
         adapter.applyClock(selectedDayDate, st, nextKey);
         updateNextLessonPanel(currentDayEmpty ? next : null);
+        WidgetUpdateHelper.updateAllWidgets(this);
     }
 
     private void updateNextLessonPanel(NextLesson next) {
@@ -813,6 +857,15 @@ public class MainActivity extends AppCompatActivity {
     public boolean onOptionsItemSelected(MenuItem it) {
         if (it.getItemId() == R.id.action_bell_schedule) {
             BellScheduleDialog.show(this);
+            return true;
+        }
+        if (it.getItemId() == R.id.action_attendance) {
+            AttendanceDialog.show(this, () -> {
+                if (attendanceManager != null) {
+                    attendanceManager.invalidateCache();
+                    adapter.notifyDataSetChanged();
+                }
+            });
             return true;
         }
         if (it.getItemId() == R.id.action_settings) {

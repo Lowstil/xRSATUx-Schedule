@@ -11,6 +11,10 @@
         android:title="Расписание звонков"
         app:showAsAction="never" />
     <item
+        android:id="@+id/action_attendance"
+        android:title="Моя посещаемость"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/action_settings"
         android:title="@string/action_settings"
         app:showAsAction="never" />

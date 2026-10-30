@@ -1,6 +1,7 @@
 package com.university.schedule.widget;
 
 import android.content.Context;
+import android.content.Intent;
 import android.view.View;
 import android.widget.RemoteViews;
 import android.widget.RemoteViewsService;
@@ -111,6 +112,10 @@ public class ScheduleWidgetFactory implements RemoteViewsService.RemoteViewsFact
         row.setInt(R.id.widgetLessonSubject, "setAlpha", alpha);
         row.setInt(R.id.widgetLessonTime, "setAlpha", alpha);
         row.setInt(R.id.widgetLessonRoom, "setAlpha", alpha);
+
+        Intent fillInIntent = new Intent();
+        row.setOnClickFillInIntent(R.id.widgetLessonSubject, fillInIntent);
+        row.setOnClickFillInIntent(R.id.widgetLessonNumber, fillInIntent);
         return row;
     }
 
