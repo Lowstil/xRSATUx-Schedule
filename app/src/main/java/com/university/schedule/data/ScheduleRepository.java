@@ -105,6 +105,7 @@ return !date.isBefore(start) && date.isBefore(end);
 }
 public void refreshLogic() {
 initLogic();
+com.university.schedule.widget.WidgetUpdateHelper.updateAllWidgets(context);
 }
 public void loadScheduleFromNetwork(LoadCallback cb) {
 try {
@@ -394,6 +395,12 @@ noteDao.saveOrUpdate(date, lessonNum, subject, text, imagePath, completed);
 }
 public List<String> getDistinctSubjectsForGroup(String groupName) {
 return scheduleDao.extractDistinctSubjectsForGroup(groupName);
+}
+public List<ScheduleItem> getScheduleForGroupAndWeekType(String group, String weekType) {
+return scheduleDao.getScheduleForGroup(group, weekType);
+}
+public List<TransferItem> getTransfersForDate(String date) {
+return transferDao.getForDate(date);
 }
 public void deleteNote(String date, int lessonNum) {
 noteDao.delete(date, lessonNum);

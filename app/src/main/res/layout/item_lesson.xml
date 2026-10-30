@@ -4,12 +4,17 @@
     android:id="@+id/cardView"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="4dp"
+    android:layout_marginStart="8dp"
+    android:layout_marginEnd="8dp"
+    android:layout_marginTop="5dp"
+    android:layout_marginBottom="5dp"
     android:clickable="true"
     android:focusable="true"
     android:foreground="?attr/selectableItemBackground"
-    app:cardCornerRadius="12dp"
-    app:cardElevation="2dp">
+    app:cardCornerRadius="18dp"
+    app:cardElevation="2dp"
+    app:strokeWidth="1dp"
+    app:strokeColor="@color/outline">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -162,16 +167,6 @@
                     android:paddingBottom="3dp"
                     android:textSize="12sp"
                     android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/tvOnline"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="4dp"
-                    android:text="@string/online_badge"
-                    android:textColor="@color/online"
-                    android:textSize="11sp"
-                    android:visibility="gone" />
             </LinearLayout>
 
             <TextView
@@ -226,6 +221,23 @@
                 android:paddingBottom="3dp"
                 android:text="Перезачёт"
                 android:textColor="@color/badge_exempt_text"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <!-- Предупреждение о количестве пропусков / энок -->
+            <TextView
+                android:id="@+id/tvAttendanceWarning"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:background="@drawable/bg_type_badge"
+                android:paddingStart="8dp"
+                android:paddingTop="3dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="3dp"
+                android:text="🟡 Внимание: уже 3 пропуска, пора ходить!"
+                android:textColor="@color/badge_warning_text"
                 android:textSize="11sp"
                 android:textStyle="bold"
                 android:visibility="gone" />

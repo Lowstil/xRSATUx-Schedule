@@ -79,4 +79,12 @@ public class PrefsManager {
     public void setMorningDigestEnabled(boolean enabled) {
         prefs.edit().putBoolean(PREF_MORNING_DIGEST_ENABLED, enabled).apply();
     }
+
+    public static final String PREF_FIRST_LAUNCH = "pref_first_launch";
+    public boolean isFirstLaunch() {
+        return prefs.getBoolean(PREF_FIRST_LAUNCH, true);
+    }
+    public void setFirstLaunchCompleted(boolean completed) {
+        prefs.edit().putBoolean(PREF_FIRST_LAUNCH, !completed).apply();
+    }
 }
