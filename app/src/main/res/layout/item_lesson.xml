@@ -191,7 +191,23 @@
                 android:textStyle="bold"
                 android:visibility="gone" />
 
-            <!-- Пометка "Не пойду" (пропуск пары по долгому нажатию) -->
+                        <TextView
+                android:id="@+id/tvAttendedBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:background="@drawable/bg_type_badge"
+                android:paddingStart="8dp"
+                android:paddingTop="3dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="3dp"
+                android:text="✓ Посещено"
+                android:textColor="@color/badge_attended_text"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+<!-- Пометка "Не пойду" (пропуск пары по долгому нажатию) -->
             <TextView
                 android:id="@+id/tvSkippedBadge"
                 android:layout_width="wrap_content"
@@ -202,8 +218,8 @@
                 android:paddingTop="3dp"
                 android:paddingEnd="8dp"
                 android:paddingBottom="3dp"
-                android:text="Не пойду"
-                android:textColor="@color/badge_skipped_text"
+                android:text="🔴 Н-ка"
+                android:textColor="@color/badge_nka_text"
                 android:textSize="11sp"
                 android:textStyle="bold"
                 android:visibility="gone" />

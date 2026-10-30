@@ -17,11 +17,11 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Менеджер учёта посещаемости и статистики пропусков ("энок").
+ * Менеджер учёта посещаемости и статистики пропусков ("Н-ок").
  * Подсчитывает количество запланированных пар, количество пропусков и % посещаемости
  * по каждому предмету и в целом за текущий семестр.
  * Если по предмету накопилось >= 3 пропусков, выдаёт предупреждение:
- * "🟡 Внимание: уже X пропуска(ов), пора ходить!".
+ * "🟡 Внимание: уже X Н-ок, пора ходить!".
  */
 public class AttendanceManager {
     public static final int DEFAULT_WARNING_THRESHOLD = 3;
@@ -86,7 +86,6 @@ public class AttendanceManager {
     public synchronized List<SubjectAttendance> getSubjectStatsList(String groupName) {
         Map<String, SubjectAttendance> map = getStatsMap(groupName);
         List<SubjectAttendance> list = new ArrayList<>(map.values());
-        // Сортируем: сначала с пропусками и предупреждениями, затем по алфавиту
         Collections.sort(list, (a, b) -> {
             if (a.missedCount != b.missedCount) {
                 return Integer.compare(b.missedCount, a.missedCount);
@@ -110,7 +109,7 @@ public class AttendanceManager {
         Map<String, SubjectAttendance> map = getStatsMap(group);
         SubjectAttendance sa = map.get(subjectName.trim());
         if (sa != null && sa.hasWarning()) {
-            return "🟡 Внимание: уже " + sa.missedCount + " " + formatSkips(sa.missedCount) + ", пора ходить!";
+            return "🟡 Внимание: уже " + formatSkips(sa.missedCount) + ", пора ходить!";
         }
         return null;
     }
@@ -145,9 +144,10 @@ public class AttendanceManager {
         WeekCalculator calc = repo.getWeekCalculator();
         Set<String> excluded = excludedMgr.getExcludedSubjects(groupName);
 
-        // Сканируем дни от начала семестра до сегодняшнего дня
+        // Сканируем от начала семестра до today + 14 дней (чтобы учесть заранее отмеченные пары)
+        LocalDate scanEnd = today.plusDays(14);
         LocalDate cursor = semStart;
-        while (!cursor.isAfter(today)) {
+        while (!cursor.isAfter(scanEnd)) {
             int dow = DateUtils.toScheduleDayOfWeek(cursor);
             if (dow >= 1 && dow <= 6) {
                 int weekNum = calc.getWeekNumber(cursor);
@@ -155,6 +155,8 @@ public class AttendanceManager {
                     String wt = (weekNum % 2 == 0) ? Constants.WEEK_TYPE_EVEN : Constants.WEEK_TYPE_ODD;
                     List<ScheduleItem> rawLessons = repo.getScheduleForGroupAndWeekType(groupName, wt);
                     List<TransferItem> transfers = repo.getTransfersForDate(cursor.toString());
+
+                    boolean isFuture = cursor.isAfter(today);
 
                     if (rawLessons != null) {
                         for (ScheduleItem item : rawLessons) {
@@ -165,6 +167,12 @@ public class AttendanceManager {
 
                             if (!item.isActiveOnWeek(weekNum)) continue;
 
+                            boolean isSkipped = skippedMgr.isSkipped(cursor.toString(), item.getLessonNumber(), sub);
+                            boolean isAttended = skippedMgr.isAttended(cursor.toString(), item.getLessonNumber(), sub);
+
+                            // Будущие пары учитываем только если пользователь заранее выставил им отметку
+                            if (isFuture && !isSkipped && !isAttended) continue;
+
                             SubjectAttendance sa = cachedStats.get(sub);
                             if (sa == null) {
                                 sa = new SubjectAttendance(sub);
@@ -172,9 +180,10 @@ public class AttendanceManager {
                             }
                             sa.totalPlanned++;
 
-                            boolean isSkipped = skippedMgr.isSkipped(cursor.toString(), item.getLessonNumber(), sub);
                             if (isSkipped) {
                                 sa.missedCount++;
+                            } else {
+                                sa.attendedCount++;
                             }
                         }
                     }
@@ -187,14 +196,21 @@ public class AttendanceManager {
                             String sub = t.getSubjectName() != null ? t.getSubjectName().trim() : "";
                             if (sub.isEmpty() || (excluded != null && excluded.contains(sub))) continue;
 
+                            boolean isSkipped = skippedMgr.isSkipped(cursor.toString(), t.getLessonNumber(), sub);
+                            boolean isAttended = skippedMgr.isAttended(cursor.toString(), t.getLessonNumber(), sub);
+
+                            if (isFuture && !isSkipped && !isAttended) continue;
+
                             SubjectAttendance sa = cachedStats.get(sub);
                             if (sa == null) {
                                 sa = new SubjectAttendance(sub);
                                 cachedStats.put(sub, sa);
                             }
                             sa.totalPlanned++;
-                            if (skippedMgr.isSkipped(cursor.toString(), t.getLessonNumber(), sub)) {
+                            if (isSkipped) {
                                 sa.missedCount++;
+                            } else {
+                                sa.attendedCount++;
                             }
                         }
                     }
@@ -203,7 +219,7 @@ public class AttendanceManager {
             cursor = cursor.plusDays(1);
         }
 
-        // Применяем ручные корректировки и считаем проценты
+        // Применяем ручные корректировки и пересчитываем проценты
         int totalPlannedAll = 0;
         int totalMissedAll = 0;
 
@@ -211,7 +227,6 @@ public class AttendanceManager {
             int adj = getManualAdjustment(groupName, sa.subjectName);
             sa.missedCount = Math.max(0, sa.missedCount + adj);
             if (sa.missedCount > sa.totalPlanned && sa.totalPlanned > 0) {
-                // Если пользователь вручную добавил больше пропусков, чем было по плану
                 sa.totalPlanned = sa.missedCount;
             }
             sa.attendedCount = Math.max(0, sa.totalPlanned - sa.missedCount);
@@ -234,9 +249,9 @@ public class AttendanceManager {
     public static String formatSkips(int count) {
         int rem100 = count % 100;
         int rem10 = count % 10;
-        if (rem100 >= 11 && rem100 <= 19) return "пропусков";
-        if (rem10 == 1) return "пропуск";
-        if (rem10 >= 2 && rem10 <= 4) return "пропуска";
-        return "пропусков";
+        if (rem100 >= 11 && rem100 <= 19) return count + " Н-ок";
+        if (rem10 == 1) return count + " Н-ка";
+        if (rem10 >= 2 && rem10 <= 4) return count + " Н-ки";
+        return count + " Н-ок";
     }
 }

@@ -61,6 +61,12 @@
     <color name="badge_exempt_bg">#EDE7F6</color>
     <color name="badge_exempt_text">#512DA8</color>
 
+    <!-- Бейджи посещаемости: Посещено и Н-ка -->
+    <color name="badge_nka_text">#D32F2F</color>
+    <color name="badge_nka_bg">#FFEBEE</color>
+    <color name="badge_attended_text">#2E7D32</color>
+    <color name="badge_attended_bg">#E8F5E9</color>
+
     <!-- Бейдж предупреждения о посещаемости -->
     <color name="badge_warning_bg">#FFF8E1</color>
     <color name="badge_warning_text">#B45309</color>
