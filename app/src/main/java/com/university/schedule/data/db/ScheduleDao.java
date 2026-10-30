@@ -88,6 +88,29 @@ public class ScheduleDao {
         return extractDistinctColumn(ScheduleEntry.COLUMN_TEACHER_NAME, SOURCE_TEACHER);
     }
 
+    /** Уникальный список предметов конкретной группы, по алфавиту. */
+    public List<String> extractDistinctSubjectsForGroup(String groupName) {
+        List<String> result = new ArrayList<>();
+        if (groupName == null || groupName.trim().isEmpty()) return result;
+        SQLiteDatabase db = dbHelper.getReadableDatabase();
+        String sql = "SELECT DISTINCT " + ScheduleEntry.COLUMN_SUBJECT_NAME + " FROM " + ScheduleEntry.TABLE_NAME +
+                " WHERE " + ScheduleEntry.COLUMN_SOURCE + " = ? AND " +
+                ScheduleEntry.COLUMN_GROUP_NAME + " = ? AND " +
+                ScheduleEntry.COLUMN_SUBJECT_NAME + " IS NOT NULL AND " + ScheduleEntry.COLUMN_SUBJECT_NAME + " != '' " +
+                "ORDER BY " + ScheduleEntry.COLUMN_SUBJECT_NAME + " COLLATE NOCASE ASC";
+        try (Cursor cursor = db.rawQuery(sql, new String[]{SOURCE_GROUP, groupName.trim()})) {
+            while (cursor.moveToNext()) {
+                String value = cursor.getString(0);
+                if (value != null && !value.trim().isEmpty() && !result.contains(value.trim())) {
+                    result.add(value.trim());
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Ошибка выборки предметов группы " + groupName, e);
+        }
+        return result;
+    }
+
     private List<String> extractDistinctColumn(String column, String source) {
         List<String> result = new ArrayList<>();
         SQLiteDatabase db = dbHelper.getReadableDatabase();

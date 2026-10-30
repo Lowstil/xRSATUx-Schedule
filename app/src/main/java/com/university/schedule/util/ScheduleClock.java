@@ -42,6 +42,38 @@ public final class ScheduleClock {
         }
     }
 
+    public static final class LessonProgress {
+        public final int elapsedMinutes;
+        public final int totalMinutes;
+        public final int remainingMinutes;
+        public final int part1Max;      // 45
+        public final int part1Progress; // 0..45
+        public final int breakMax;      // 5
+        public final int breakProgress; // 0..5
+        public final int part2Max;      // 45
+        public final int part2Progress; // 0..45
+        public final int stage;         // 1 = 1-я половина, 2 = перерыв 5 мин, 3 = 2-я половина
+        public final String statusText;
+
+        public LessonProgress(int elapsedMinutes, int totalMinutes, int remainingMinutes,
+                              int part1Max, int part1Progress,
+                              int breakMax, int breakProgress,
+                              int part2Max, int part2Progress,
+                              int stage, String statusText) {
+            this.elapsedMinutes = elapsedMinutes;
+            this.totalMinutes = totalMinutes;
+            this.remainingMinutes = remainingMinutes;
+            this.part1Max = part1Max;
+            this.part1Progress = part1Progress;
+            this.breakMax = breakMax;
+            this.breakProgress = breakProgress;
+            this.part2Max = part2Max;
+            this.part2Progress = part2Progress;
+            this.stage = stage;
+            this.statusText = statusText;
+        }
+    }
+
     private ScheduleClock() {
     }
 
@@ -94,6 +126,63 @@ public final class ScheduleClock {
         }
 
         return new State(current, next, minutesLeft, progress, minutesUntilNext, isBreak);
+    }
+
+    /**
+     * Вычисляет 3-сегментный прогресс пары:
+     * 1) 45 минут идёт пара (зелёная)
+     * 2) 5 минут перерыв в середине пары (оранжевая)
+     * 3) 45 минут продолжается пара (зелёная)
+     */
+    public static LessonProgress computeLessonProgress(LocalTime start, LocalTime end, LocalTime now) {
+        if (start == null || end == null || now == null) return null;
+        int total = (int) java.time.Duration.between(start, end).toMinutes();
+        int elapsed = (int) Math.max(0, Math.min(total, java.time.Duration.between(start, now).toMinutes()));
+        int remaining = Math.max(0, total - elapsed);
+
+        int half1 = total >= 90 ? 45 : Math.max(10, (total - 5) / 2);
+        int midBreak = 5;
+        int half2 = Math.max(0, total - half1 - midBreak);
+
+        int p1, pb, p2, stage;
+        String status;
+
+        if (elapsed <= half1) {
+            p1 = elapsed;
+            pb = 0;
+            p2 = 0;
+            stage = 1;
+            int toBreak = half1 - elapsed;
+            status = "Идёт 1-я половина (до перерыва " + toBreak + " мин · ост. " + remaining + " мин)";
+        } else if (elapsed <= half1 + midBreak) {
+            p1 = half1;
+            pb = elapsed - half1;
+            p2 = 0;
+            stage = 2;
+            int toPart2 = (half1 + midBreak) - elapsed;
+            status = "Перерыв в паре 5 мин (до 2-й половины " + toPart2 + " мин)";
+        } else {
+            p1 = half1;
+            pb = midBreak;
+            p2 = Math.min(half2, elapsed - half1 - midBreak);
+            stage = 3;
+            status = "Идёт 2-я половина (осталось " + remaining + " мин)";
+        }
+
+        return new LessonProgress(elapsed, total, remaining, half1, p1, midBreak, pb, half2, p2, stage, status);
+    }
+
+    public static String formatTimeUntilNext(int minutesUntil, boolean isBreak) {
+        if (isBreak) {
+            return "Следующая · перемена (до пары " + minutesUntil + " мин)";
+        }
+        if (minutesUntil >= 60) {
+            int h = minutesUntil / 60;
+            int m = minutesUntil % 60;
+            return "Следующая · до пары " + h + " ч " + (m > 0 ? (m + " мин") : "");
+        } else {
+            return "Следующая (до пары " + minutesUntil + " мин)";
+        }
     }
 
     private static LocalDate nextStudyDate(LocalDate today) {

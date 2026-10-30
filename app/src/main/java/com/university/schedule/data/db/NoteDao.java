@@ -21,12 +21,17 @@ public class NoteDao {
     }
 
     public long saveOrUpdate(String date, int lessonNumber, String subjectName, String text, boolean isCompleted) {
+        return saveOrUpdate(date, lessonNumber, subjectName, text, null, isCompleted);
+    }
+
+    public long saveOrUpdate(String date, int lessonNumber, String subjectName, String text, String imagePath, boolean isCompleted) {
         SQLiteDatabase db = dbHelper.getWritableDatabase();
         ContentValues cv = new ContentValues();
         cv.put(ScheduleContract.NoteEntry.COLUMN_DATE, date);
         cv.put(ScheduleContract.NoteEntry.COLUMN_LESSON_NUMBER, lessonNumber);
         cv.put(ScheduleContract.NoteEntry.COLUMN_SUBJECT_NAME, subjectName != null ? subjectName : "");
         cv.put(ScheduleContract.NoteEntry.COLUMN_NOTE_TEXT, text != null ? text.trim() : "");
+        cv.put(ScheduleContract.NoteEntry.COLUMN_IMAGE_PATH, imagePath);
         cv.put(ScheduleContract.NoteEntry.COLUMN_IS_COMPLETED, isCompleted ? 1 : 0);
         cv.put(ScheduleContract.NoteEntry.COLUMN_CREATED_AT, DateUtils.nowIsoDateTime());
 
@@ -89,6 +94,13 @@ public class NoteDao {
         String text = c.getString(c.getColumnIndexOrThrow(ScheduleContract.NoteEntry.COLUMN_NOTE_TEXT));
         int done = c.getInt(c.getColumnIndexOrThrow(ScheduleContract.NoteEntry.COLUMN_IS_COMPLETED));
         String created = c.getString(c.getColumnIndexOrThrow(ScheduleContract.NoteEntry.COLUMN_CREATED_AT));
-        return new LessonNote(id, date, lessonNum, subject, text, done == 1, created);
+
+        String imgPath = null;
+        int imgIndex = c.getColumnIndex(ScheduleContract.NoteEntry.COLUMN_IMAGE_PATH);
+        if (imgIndex != -1 && !c.isNull(imgIndex)) {
+            imgPath = c.getString(imgIndex);
+        }
+
+        return new LessonNote(id, date, lessonNum, subject, text, imgPath, done == 1, created);
     }
 }

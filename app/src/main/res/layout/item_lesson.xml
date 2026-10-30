@@ -91,15 +91,49 @@
                         android:textStyle="bold" />
                 </LinearLayout>
 
-                <ProgressBar
-                    android:id="@+id/progressCurrentLesson"
-                    style="@android:style/Widget.ProgressBar.Horizontal"
+                <LinearLayout
+                    android:id="@+id/progressSegmentContainer"
                     android:layout_width="match_parent"
-                    android:layout_height="4dp"
-                    android:layout_marginTop="5dp"
-                    android:max="100"
-                    android:progressDrawable="@drawable/bg_lesson_progress"
-                    android:visibility="gone" />
+                    android:layout_height="5dp"
+                    android:layout_marginTop="6dp"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <ProgressBar
+                        android:id="@+id/progressPart1"
+                        style="@android:style/Widget.ProgressBar.Horizontal"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="45"
+                        android:max="45"
+                        android:progressDrawable="@drawable/bg_progress_green" />
+
+                    <Space
+                        android:layout_width="3dp"
+                        android:layout_height="match_parent" />
+
+                    <ProgressBar
+                        android:id="@+id/progressBreak"
+                        style="@android:style/Widget.ProgressBar.Horizontal"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="5"
+                        android:max="5"
+                        android:progressDrawable="@drawable/bg_progress_orange" />
+
+                    <Space
+                        android:layout_width="3dp"
+                        android:layout_height="match_parent" />
+
+                    <ProgressBar
+                        android:id="@+id/progressPart2"
+                        style="@android:style/Widget.ProgressBar.Horizontal"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="45"
+                        android:max="45"
+                        android:progressDrawable="@drawable/bg_progress_green" />
+                </LinearLayout>
             </LinearLayout>
 
             <LinearLayout
@@ -158,6 +192,40 @@
                 android:paddingTop="3dp"
                 android:paddingEnd="8dp"
                 android:paddingBottom="3dp"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <!-- Пометка "Не пойду" (пропуск пары по долгому нажатию) -->
+            <TextView
+                android:id="@+id/tvSkippedBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:background="@drawable/bg_type_badge"
+                android:paddingStart="8dp"
+                android:paddingTop="3dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="3dp"
+                android:text="Не пойду"
+                android:textColor="@color/badge_skipped_text"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <!-- Пометка "Перезачёт" (исключённый предмет группы) -->
+            <TextView
+                android:id="@+id/tvExemptBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:background="@drawable/bg_type_badge"
+                android:paddingStart="8dp"
+                android:paddingTop="3dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="3dp"
+                android:text="Перезачёт"
+                android:textColor="@color/badge_exempt_text"
                 android:textSize="11sp"
                 android:textStyle="bold"
                 android:visibility="gone" />
@@ -237,6 +305,15 @@
                     android:maxLines="1"
                     android:textColor="@color/text_primary"
                     android:textSize="12sp" />
+
+                <ImageView
+                    android:id="@+id/ivNotePhotoIcon"
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:layout_marginStart="6dp"
+                    android:src="@drawable/ic_photo_camera"
+                    app:tint="@color/text_secondary"
+                    android:visibility="gone" />
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>
