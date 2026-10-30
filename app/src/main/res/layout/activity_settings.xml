@@ -108,6 +108,46 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
+            <!-- Исключённые предметы (перезачёт) -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardExcludedSubjects"
+                style="@style/Widget.UniSchedule.CardView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Перезачёт и исключённые пары"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/tvExcludedSubjectsSummary"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Нет исключённых предметов"
+                        android:textColor="@color/text_primary"
+                        android:textSize="14sp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnSelectExcludedSubjects"
+                        style="@style/Widget.UniSchedule.Button.Outlined"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="Настроить вычеркнутые предметы" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
             <!-- Уведомления и напоминания -->
             <com.google.android.material.card.MaterialCardView
                 style="@style/Widget.UniSchedule.CardView"

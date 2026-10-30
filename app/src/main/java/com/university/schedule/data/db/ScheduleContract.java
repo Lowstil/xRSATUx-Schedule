@@ -17,7 +17,7 @@ public final class ScheduleContract {
     }
 
     public static final String DATABASE_NAME = "unischedule.db";
-    public static final int DATABASE_VERSION = 3; // v3: добавлена таблица notes (заметки и ДЗ к парам)
+    public static final int DATABASE_VERSION = 4; // v4: добавлено поле image_path в таблицу notes
 
     /**
      * Переносы занятий (лист "Переносы" в отдельном xlsx-файле). В отличие от
@@ -90,6 +90,7 @@ public final class ScheduleContract {
         public static final String COLUMN_LESSON_NUMBER = "lesson_number";
         public static final String COLUMN_SUBJECT_NAME = "subject_name";
         public static final String COLUMN_NOTE_TEXT = "note_text";
+        public static final String COLUMN_IMAGE_PATH = "image_path";
         public static final String COLUMN_IS_COMPLETED = "is_completed";
         public static final String COLUMN_CREATED_AT = "created_at";
         public static final String INDEX_NOTES = "idx_notes_date_lesson";
@@ -164,6 +165,7 @@ public final class ScheduleContract {
                     NoteEntry.COLUMN_LESSON_NUMBER + " INTEGER NOT NULL, " +
                     NoteEntry.COLUMN_SUBJECT_NAME + " TEXT NOT NULL, " +
                     NoteEntry.COLUMN_NOTE_TEXT + " TEXT NOT NULL, " +
+                    NoteEntry.COLUMN_IMAGE_PATH + " TEXT, " +
                     NoteEntry.COLUMN_IS_COMPLETED + " INTEGER DEFAULT 0, " +
                     NoteEntry.COLUMN_CREATED_AT + " TEXT)";
 
