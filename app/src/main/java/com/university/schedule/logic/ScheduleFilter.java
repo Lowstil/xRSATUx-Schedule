@@ -78,6 +78,8 @@ public class ScheduleFilter {
             List<TransferItem> dayTransfers = filterTransfersForDate(allTransfers, date, matchName, isGroup);
             if (!dayTransfers.isEmpty()) {
                 lessons = mergeTransfers(lessons, dayTransfers);
+            } else if (lessons.size() > 1) {
+                lessons.sort((a, b) -> Integer.compare(a.getLessonNumber(), b.getLessonNumber()));
             }
             day.setLessons(lessons);
             days.add(day);
@@ -114,6 +116,8 @@ public class ScheduleFilter {
         List<TransferItem> dayTransfers = filterTransfersForDate(allTransfers, date, matchName, isGroup);
         if (!dayTransfers.isEmpty()) {
             lessons = mergeTransfers(lessons, dayTransfers);
+        } else if (lessons.size() > 1) {
+            lessons.sort((a, b) -> Integer.compare(a.getLessonNumber(), b.getLessonNumber()));
         }
         day.setLessons(lessons);
         return day;
