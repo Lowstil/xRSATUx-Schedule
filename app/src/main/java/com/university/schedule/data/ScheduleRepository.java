@@ -32,6 +32,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 public class ScheduleRepository {
 private static final String TAG = "ScheduleRepository";
@@ -274,35 +275,18 @@ if (dow == 0) continue; // воскресенье — всегда выходн�
 int week = weekCalculator.getWeekNumber(date);
 if (week < 1) continue; // вне семестра
 String wt = weekCalculator.getWeekTypeForDate(date);
-// Получаем расписание для ОБОИХ типов недель (на случай если пара есть только на одной из недель)
-List<ScheduleItem> itemsOdd = group
-? scheduleDao.getScheduleForGroup(name, "odd")
-: scheduleDao.getScheduleForTeacher(name, "odd");
-List<ScheduleItem> itemsEven = group
-? scheduleDao.getScheduleForGroup(name, "even")
-: scheduleDao.getScheduleForTeacher(name, "even");
-// Объединяем списки, убирая дубликаты (пары с weekSpec=ALL или совпадающие)
-List<ScheduleItem> items = new ArrayList<>();
-if (itemsOdd != null) items.addAll(itemsOdd);
-if (itemsEven != null) {
-for (ScheduleItem it : itemsEven) {
-boolean exists = false;
-for (ScheduleItem existing : items) {
-if (existing.getDayOfWeek() == it.getDayOfWeek()
-&& existing.getLessonNumber() == it.getLessonNumber()
-&& existing.getSubjectName().equals(it.getSubjectName())) {
-exists = true; break;
-}
-}
-if (!exists) items.add(it);
-}
-}
+List<ScheduleItem> items = group
+? scheduleDao.getScheduleForGroup(name, wt)
+: scheduleDao.getScheduleForTeacher(name, wt);
 List<TransferItem> transfers = transferDao.getForDate(date.toString());
 DaySchedule day = scheduleFilter.buildDaySchedule(items, dow, week, wt, date, transfers, name, group);
 if (day.isDayOff()) continue; // праздничный выходной
 // Проверяем наличие занятий: учитываем как обычные пары, так и добавленные переносом
 List<ScheduleItem> lessons = day.getLessons();
 if (lessons == null || lessons.isEmpty()) continue;
+if (lessons.size() > 1) {
+Collections.sort(lessons, (a, b) -> Integer.compare(a.getLessonNumber(), b.getLessonNumber()));
+}
 String[][] times = Constants.getLessonTimes(dow);
 for (ScheduleItem it : lessons) {
 if (it.isCancelled()) continue; // отменено переносом
