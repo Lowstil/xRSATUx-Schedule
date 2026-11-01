@@ -29,6 +29,18 @@ public final class DateUtils {
         int v = date.getDayOfWeek().getValue();
         return v == 7 ? 0 : v;
     }
+    /**
+     * Целевая дата для первого отображения в расписании:
+     * с понедельника по субботу — сегодня;
+     * в воскресенье (учебных занятий нет) — понедельник следующей недели (завтра).
+     */
+    public static LocalDate initialScheduleDate(LocalDate today) {
+        if (today == null) return null;
+        if (today.getDayOfWeek() == java.time.DayOfWeek.SUNDAY) {
+            return today.plusDays(1);
+        }
+        return today;
+    }
     public static LocalDate dateForDayInWeek(LocalDate monday, int dayOfWeek) { return monday.plusDays(dayOfWeek - 1L); }
     public static LocalDate mondayOfWeek(LocalDate date) { return date.minusDays(date.getDayOfWeek().getValue() - 1L); }
     public static String formatDisplayDate(LocalDate date) { return date == null ? "" : date.format(DISPLAY_DATE); }
