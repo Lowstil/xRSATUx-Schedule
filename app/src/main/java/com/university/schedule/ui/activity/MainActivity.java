@@ -181,6 +181,11 @@ public class MainActivity extends AppCompatActivity {
         tvSelectionName.setText(selName != null ? selName : "—");
         tvSelectionType.setText(GroupOrTeacher.TYPE_GROUP.equals(selType) ? "Группа" : "Преподаватель");
         tvTodayDate.setText(DateUtils.formatDisplayDateShort(DateUtils.todayMoscow()));
+        tvTodayDate.setOnClickListener(v -> {
+            initWeekForDate(DateUtils.todayMoscow());
+            loadWeek();
+            selectTodayTab();
+        });
 
         if (btnSettings != null) {
             btnSettings.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
@@ -648,9 +653,14 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void initWeekForDate(LocalDate today) {
-        weekNum = calc.getCurrentWeekNumber();
-        if (weekNum < 1) weekNum = 1;
-        int dow = DateUtils.toScheduleDayOfWeek(today);
+        LocalDate target = DateUtils.initialScheduleDate(today);
+        weekNum = calc.getWeekNumber(target);
+        if (weekNum < 1) {
+            weekNum = calc.getCurrentWeekNumber();
+            if (weekNum < 1) weekNum = 1;
+        }
+        if (weekNum > 18) weekNum = 18;
+        int dow = DateUtils.toScheduleDayOfWeek(target);
         dayIndex = (dow >= 1 && dow <= 6) ? dow - 1 : 0;
         builtForDate = today;
     }

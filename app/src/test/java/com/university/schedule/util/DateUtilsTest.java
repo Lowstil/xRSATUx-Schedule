@@ -52,4 +52,25 @@ public class DateUtilsTest {
         org.junit.Assert.assertEquals("Наступит через 5 дней", DateUtils.relativeDayLabel(today.plusDays(5), today));
         assertNull(DateUtils.relativeDayLabel(today.minusDays(1), today));
     }
+
+    @Test
+    public void initialScheduleDate_onWeekdayAndSaturday_returnsSameDate() {
+        java.time.LocalDate monday = java.time.LocalDate.of(2026, 10, 26);
+        org.junit.Assert.assertEquals(monday, DateUtils.initialScheduleDate(monday));
+
+        java.time.LocalDate saturday = java.time.LocalDate.of(2026, 10, 31);
+        org.junit.Assert.assertEquals(saturday, DateUtils.initialScheduleDate(saturday));
+    }
+
+    @Test
+    public void initialScheduleDate_onSunday_returnsMondayOfNextWeek() {
+        java.time.LocalDate sunday = java.time.LocalDate.of(2026, 11, 1);
+        java.time.LocalDate expectedMonday = java.time.LocalDate.of(2026, 11, 2);
+        org.junit.Assert.assertEquals(expectedMonday, DateUtils.initialScheduleDate(sunday));
+    }
+
+    @Test
+    public void initialScheduleDate_null_returnsNull() {
+        assertNull(DateUtils.initialScheduleDate(null));
+    }
 }
