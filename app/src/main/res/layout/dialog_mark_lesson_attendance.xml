@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/cardMarkLessonRoot"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    app:cardBackgroundColor="@color/surface"
-    app:cardCornerRadius="24dp"
+    app:cardBackgroundColor="@color/glass_surface"
+    app:cardCornerRadius="28dp"
     app:cardElevation="8dp"
-    app:strokeColor="@color/outline"
+    app:strokeColor="@color/glass_stroke_start"
     app:strokeWidth="1dp">
 
     <LinearLayout
@@ -15,24 +16,24 @@
         android:orientation="vertical"
         android:padding="20dp">
 
-        <!-- Шапка диалога с кнопкой закрытия -->
-        <RelativeLayout
+        <!-- Шапка диалога -->
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content">
+            android:layout_height="wrap_content"
+            android:gravity="top"
+            android:orientation="horizontal">
 
             <LinearLayout
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_alignParentStart="true"
-                android:layout_centerVertical="true"
-                android:layout_toStartOf="@+id/btnCloseMarkDialog"
+                android:layout_weight="1"
                 android:orientation="vertical">
 
                 <TextView
                     android:id="@+id/tvMarkLessonSubject"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textColor="@color/text_primary"
+                    android:textColor="@color/glass_text_primary"
                     android:textSize="18sp"
                     android:textStyle="bold" />
 
@@ -40,8 +41,9 @@
                     android:id="@+id/tvMarkLessonDetails"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="3dp"
-                    android:textColor="@color/text_secondary"
+                    android:layout_marginTop="4dp"
+                    android:fontFeatureSettings="tnum"
+                    android:textColor="@color/glass_text_secondary"
                     android:textSize="13sp" />
 
                 <TextView
@@ -49,71 +51,50 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
-                    android:textColor="@color/text_tertiary"
+                    android:textColor="@color/glass_text_secondary"
                     android:textSize="12sp" />
             </LinearLayout>
 
             <ImageButton
                 android:id="@+id/btnCloseMarkDialog"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:layout_alignParentEnd="true"
-                android:layout_alignParentTop="true"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Закрыть"
+                android:padding="6dp"
                 android:src="@drawable/ic_close"
-                app:tint="@color/text_secondary" />
-        </RelativeLayout>
-
-        <!-- Текущий статус пары -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:layout_marginBottom="14dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Текущий статус:"
-                android:textColor="@color/text_secondary"
-                android:textSize="13sp" />
-
-            <TextView
-                android:id="@+id/tvCurrentStatusBadge"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:background="@drawable/bg_type_badge"
-                android:paddingStart="10dp"
-                android:paddingTop="4dp"
-                android:paddingEnd="10dp"
-                android:paddingBottom="4dp"
-                android:text="⚪ Не отмечено"
-                android:textColor="@color/text_secondary"
-                android:textSize="12sp"
-                android:textStyle="bold" />
+                app:tint="@color/glass_text_secondary" />
         </LinearLayout>
 
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:background="@color/outline" />
+        <!-- Текущий статус -->
+        <TextView
+            android:id="@+id/tvCurrentStatusBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/bg_type_badge"
+            android:paddingStart="12dp"
+            android:paddingTop="5dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="5dp"
+            android:text="⚪ Не отмечено"
+            android:textColor="@color/glass_text_secondary"
+            android:textSize="12sp"
+            android:textStyle="bold" />
 
-        <!-- Кнопка 1: Посетил / Пойду -->
+        <!-- Пилюля 1: Посетил / Пойду (зелёное свечение) -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/cardMarkAttended"
-            style="@style/Widget.UniSchedule.CardView"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
             android:clickable="true"
             android:focusable="true"
             android:foreground="?attr/selectableItemBackground"
-            app:cardCornerRadius="16dp"
-            app:strokeColor="@color/badge_attended_text"
+            app:cardBackgroundColor="@color/glass_capsule"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="2dp"
+            app:strokeColor="@color/glass_success"
             app:strokeWidth="1.5dp">
 
             <LinearLayout
@@ -121,22 +102,25 @@
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:padding="14dp">
+                android:paddingStart="14dp"
+                android:paddingTop="12dp"
+                android:paddingEnd="14dp"
+                android:paddingBottom="12dp">
 
                 <TextView
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
                     android:background="@drawable/bg_progress_green"
                     android:gravity="center"
                     android:text="✓"
                     android:textColor="#FFFFFF"
-                    android:textSize="20sp"
+                    android:textSize="18sp"
                     android:textStyle="bold" />
 
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="14dp"
+                    android:layout_marginStart="12dp"
                     android:layout_weight="1"
                     android:orientation="vertical">
 
@@ -145,7 +129,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Посетил / Пойду"
-                        android:textColor="@color/badge_attended_text"
+                        android:textColor="@color/glass_success"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
@@ -153,25 +137,26 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
-                        android:text="Отметить пару как посещенную (в зачёт)"
-                        android:textColor="@color/text_secondary"
+                        android:text="Засчитать пару в посещаемость"
+                        android:textColor="@color/glass_text_secondary"
                         android:textSize="12sp" />
                 </LinearLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Кнопка 2: Поставить Н-ку (Пропуск) -->
+        <!-- Пилюля 2: Н-ка / Пропуск (красное свечение) -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/cardMarkSkipped"
-            style="@style/Widget.UniSchedule.CardView"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
             android:clickable="true"
             android:focusable="true"
             android:foreground="?attr/selectableItemBackground"
-            app:cardCornerRadius="16dp"
-            app:strokeColor="@color/badge_nka_text"
+            app:cardBackgroundColor="@color/glass_capsule"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="2dp"
+            app:strokeColor="@color/glass_danger"
             app:strokeWidth="1.5dp">
 
             <LinearLayout
@@ -179,30 +164,33 @@
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:padding="14dp">
+                android:paddingStart="14dp"
+                android:paddingTop="12dp"
+                android:paddingEnd="14dp"
+                android:paddingBottom="12dp">
 
                 <TextView
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
+                    android:layout_width="38dp"
+                    android:layout_height="38dp"
                     android:background="@drawable/bg_progress_orange"
                     android:gravity="center"
-                    android:text="Н"
+                    android:text="✕"
                     android:textColor="#FFFFFF"
-                    android:textSize="18sp"
+                    android:textSize="17sp"
                     android:textStyle="bold" />
 
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="14dp"
+                    android:layout_marginStart="12dp"
                     android:layout_weight="1"
                     android:orientation="vertical">
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Поставить Н-ку (Пропуск)"
-                        android:textColor="@color/badge_nka_text"
+                        android:text="Н-ка (Пропуск)"
+                        android:textColor="@color/glass_danger"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
@@ -210,23 +198,28 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
-                        android:text="Отметить пропуск (напоминания будут отключены)"
-                        android:textColor="@color/text_secondary"
+                        android:text="Отметить пропуск · без напоминаний"
+                        android:textColor="@color/glass_text_secondary"
                         android:textSize="12sp" />
                 </LinearLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Кнопка 3: Сбросить отметку -->
+        <!-- Пилюля 3: Сбросить (нейтральная) -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnResetMark"
-            style="@style/Widget.UniSchedule.Button.Outlined"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="match_parent"
             android:layout_height="46dp"
             android:layout_marginTop="12dp"
-            android:text="Сбросить отметку"
-            android:textColor="@color/text_secondary"
-            app:strokeColor="@color/outline" />
+            android:text="↺ Сбросить"
+            android:textAllCaps="false"
+            android:textColor="@color/glass_text_secondary"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            app:cornerRadius="999dp"
+            app:strokeColor="@color/glass_stroke_start"
+            app:strokeWidth="1dp" />
 
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

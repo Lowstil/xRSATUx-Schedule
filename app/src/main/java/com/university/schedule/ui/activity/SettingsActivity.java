@@ -22,13 +22,19 @@ import com.google.android.material.switchmaterial.SwitchMaterial;
 import com.university.schedule.R;
 import com.university.schedule.data.ScheduleRepository;
 import com.university.schedule.logic.SemesterManager;
+import com.university.schedule.notification.LiveLessonService;
 import com.university.schedule.notification.ReminderScheduler;
 import com.university.schedule.ui.dialog.BellScheduleDialog;
+import com.university.schedule.ui.dialog.RoomTeacherFinderDialog;
+import com.university.schedule.ui.dialog.ScheduleDiffDialog;
+import com.university.schedule.ui.glass.AmbientBackdropView;
+import com.university.schedule.ui.glass.GlassSurfaceHelper;
 import com.university.schedule.util.AppError;
 import com.university.schedule.util.DateUtils;
 import com.university.schedule.util.EdgeToEdgeCompat;
 import com.university.schedule.util.ExcludedSubjectsManager;
 import com.university.schedule.util.PrefsManager;
+import com.university.schedule.util.ScheduleExporter;
 import com.university.schedule.util.ThemeManager;
 
 import java.time.LocalDate;
@@ -50,22 +56,26 @@ public class SettingsActivity extends AppCompatActivity {
     private TextView tvSel, tvSem, tvUpd, tvTransfersUpd;
     private MaterialButton btnRefresh;
     private MaterialButtonToggleGroup toggleTheme;
-    private SwitchMaterial switchLessonReminder, switchMorningDigest;
+    private SwitchMaterial switchLessonReminder, switchMorningDigest, switchLiveLessonNotif, switchReducedTransparency;
     private MaterialButtonToggleGroup toggleReminderMinutes;
     private View cardExcludedSubjects;
+    private AmbientBackdropView ambientBackdrop;
     private TextView tvExcludedSubjectsSummary;
     private MaterialButton btnSelectExcludedSubjects;
     private boolean suppressThemeCallback;
     private boolean suppressReminderCallback;
+    private boolean suppressGlassCallback;
 
     @Override
     protected void onCreate(Bundle s) {
         super.onCreate(s);
         setContentView(R.layout.activity_settings);
-        EdgeToEdgeCompat.applyEdgeToEdgeInsets(this);
+        EdgeToEdgeCompat.applyEdgeToEdgeInsets(findViewById(R.id.settingsContentContainer));
         repo = ScheduleRepository.getInstance(this);
         prefs = new PrefsManager(this);
         excludedManager = new ExcludedSubjectsManager(this);
+
+        ambientBackdrop = findViewById(R.id.ambientBackdrop);
 
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
@@ -82,9 +92,11 @@ public class SettingsActivity extends AppCompatActivity {
         btnRefresh = findViewById(R.id.btnRefreshSchedule);
         toggleTheme = findViewById(R.id.toggleTheme);
 
+        switchLiveLessonNotif = findViewById(R.id.switchLiveLessonNotif);
         switchLessonReminder = findViewById(R.id.switchLessonReminder);
         toggleReminderMinutes = findViewById(R.id.toggleReminderMinutes);
         switchMorningDigest = findViewById(R.id.switchMorningDigest);
+        switchReducedTransparency = findViewById(R.id.switchReducedTransparency);
 
         cardExcludedSubjects = findViewById(R.id.cardExcludedSubjects);
         tvExcludedSubjectsSummary = findViewById(R.id.tvExcludedSubjectsSummary);
@@ -97,7 +109,10 @@ public class SettingsActivity extends AppCompatActivity {
             finish();
         });
 
+        findViewById(R.id.btnRoomTeacherFinder).setOnClickListener(v -> RoomTeacherFinderDialog.show(this));
         findViewById(R.id.btnBellSchedule).setOnClickListener(v -> BellScheduleDialog.show(this));
+        findViewById(R.id.btnShowDiff).setOnClickListener(v -> ScheduleDiffDialog.show(this));
+        findViewById(R.id.btnShareSchedule).setOnClickListener(v -> ScheduleExporter.showExportDialog(this));
         findViewById(R.id.btnChangeSemester).setOnClickListener(v -> pickDate());
         btnRefresh.setOnClickListener(v -> doRefresh());
 
@@ -118,13 +133,50 @@ public class SettingsActivity extends AppCompatActivity {
                 .show());
 
         setupThemeToggle();
+        setupGlassSettings();
         setupNotificationSettings();
         setupExcludedSubjects();
+        applyGlassCards();
         updateInfo();
+    }
+
+    private void applyGlassCards() {
+        int[] cardIds = {
+                R.id.cardSelection,
+                R.id.cardTools,
+                R.id.cardShare,
+                R.id.cardExcludedSubjects,
+                R.id.cardNotifications,
+                R.id.cardSemester,
+                R.id.cardAppearance,
+                R.id.cardData
+        };
+        for (int id : cardIds) {
+            View card = findViewById(id);
+            if (card != null) {
+                GlassSurfaceHelper.applyGlassCard(card, 22f, false);
+            }
+        }
+    }
+
+    private void setupGlassSettings() {
+        suppressGlassCallback = true;
+        switchReducedTransparency.setChecked(prefs.isReducedTransparency());
+        suppressGlassCallback = false;
+
+        switchReducedTransparency.setOnCheckedChangeListener((btn, isChecked) -> {
+            if (suppressGlassCallback) return;
+            prefs.setReducedTransparency(isChecked);
+            applyGlassCards();
+            if (ambientBackdrop != null) {
+                ambientBackdrop.invalidate();
+            }
+        });
     }
 
     private void setupNotificationSettings() {
         suppressReminderCallback = true;
+        switchLiveLessonNotif.setChecked(prefs.isLiveLessonNotificationEnabled());
         switchLessonReminder.setChecked(prefs.isRemindersEnabled());
         int mins = prefs.getReminderMinutesBefore();
         if (mins == 10) toggleReminderMinutes.check(R.id.btnReminder10);
@@ -133,6 +185,13 @@ public class SettingsActivity extends AppCompatActivity {
 
         switchMorningDigest.setChecked(prefs.isMorningDigestEnabled());
         suppressReminderCallback = false;
+
+        switchLiveLessonNotif.setOnCheckedChangeListener((btn, isChecked) -> {
+            if (suppressReminderCallback) return;
+            prefs.setLiveLessonNotificationEnabled(isChecked);
+            if (isChecked) checkNotificationPermission();
+            LiveLessonService.syncNow(this);
+        });
 
         switchLessonReminder.setOnCheckedChangeListener((btn, isChecked) -> {
             if (suppressReminderCallback) return;
@@ -227,6 +286,7 @@ public class SettingsActivity extends AppCompatActivity {
                     btnRefresh.setText(R.string.settings_refresh);
                     updateInfo();
                     Toast.makeText(SettingsActivity.this, "Расписание обновлено", Toast.LENGTH_SHORT).show();
+                    ScheduleDiffDialog.showIfHasChanges(SettingsActivity.this);
                 });
             }
 

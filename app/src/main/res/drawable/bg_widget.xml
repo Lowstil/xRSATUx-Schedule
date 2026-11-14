@@ -1,23 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Градиентный фон: глубокий тёмно-синий → фиолетовый -->
+    <!-- Faux-Liquid Glass deep translucent backdrop for home screen widgets -->
     <item>
         <shape android:shape="rectangle">
-            <corners android:radius="20dp" />
+            <corners android:radius="24dp" />
             <gradient
-                android:startColor="#E61E2746"
-                android:centerColor="#E6251B4E"
-                android:endColor="#E61A2440"
-                android:angle="135" />
+                android:angle="135"
+                android:centerColor="#E01D1B42"
+                android:endColor="#E00F1F33"
+                android:startColor="#E0141B33"
+                android:type="linear" />
         </shape>
     </item>
-    <!-- Тонкая светлая рамка — эффект "стекла", выделяет виджет на любых обоях -->
+    <!-- Subtle 135° internal specular sheen -->
     <item>
         <shape android:shape="rectangle">
-            <corners android:radius="20dp" />
+            <corners android:radius="24dp" />
+            <gradient
+                android:angle="135"
+                android:centerColor="#00FFFFFF"
+                android:endColor="#0CFFFFFF"
+                android:startColor="#24FFFFFF"
+                android:type="linear" />
+        </shape>
+    </item>
+    <!-- 1dp specular border -->
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="24dp" />
             <stroke
                 android:width="1dp"
-                android:color="#33FFFFFF" />
+                android:color="#4DFFFFFF" />
         </shape>
     </item>
 </layer-list>

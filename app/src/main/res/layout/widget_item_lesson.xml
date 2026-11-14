@@ -1,14 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widgetLessonRow"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="@drawable/bg_widget_row"
     android:gravity="center_vertical"
     android:orientation="horizontal"
     android:paddingStart="10dp"
-    android:paddingTop="10dp"
+    android:paddingTop="9dp"
     android:paddingEnd="10dp"
-    android:paddingBottom="10dp">
+    android:paddingBottom="9dp">
 
     <!-- Номер пары: яркий градиентный круг -->
     <TextView
@@ -24,7 +25,7 @@
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginStart="12dp"
+        android:layout_marginStart="11dp"
         android:layout_weight="1"
         android:orientation="vertical">
 
@@ -54,9 +55,9 @@
                 android:layout_marginStart="8dp"
                 android:background="@drawable/bg_widget_type_badge"
                 android:paddingStart="7dp"
-                android:paddingTop="3dp"
+                android:paddingTop="2dp"
                 android:paddingEnd="7dp"
-                android:paddingBottom="3dp"
+                android:paddingBottom="2dp"
                 android:textColor="#FFFFFFFF"
                 android:textSize="10sp"
                 android:textStyle="bold"
@@ -83,11 +84,11 @@
                 android:id="@+id/widgetLessonRoom"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="10dp"
+                android:layout_marginStart="8dp"
                 android:layout_weight="1"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:textColor="#B8C5E8"
+                android:textColor="#FFD0DCFA"
                 android:textSize="11sp" />
         </LinearLayout>
     </LinearLayout>

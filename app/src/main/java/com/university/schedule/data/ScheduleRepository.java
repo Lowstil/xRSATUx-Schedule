@@ -14,6 +14,7 @@ import com.university.schedule.logic.WeekCalculator;
 import com.university.schedule.model.DaySchedule;
 import com.university.schedule.model.Holiday;
 import com.university.schedule.model.NextLesson;
+import com.university.schedule.model.ScheduleDiff;
 import com.university.schedule.model.ScheduleItem;
 import com.university.schedule.model.SemesterInfo;
 import com.university.schedule.model.TransferItem;
@@ -166,7 +167,37 @@ if (all.isEmpty()) {
 throw new IllegalStateException("Файл расписания распознан пустым (0 записей) — существующие данные не затёрты");
 }
 cb.onProgress("Сохранение в БД (" + all.size() + " записей)...");
+List<ScheduleItem> oldSnapshot = null;
+String selType = prefsManager.getSelectionType();
+String selName = prefsManager.getSelectionName();
+boolean trackDiff = prefsManager.hasSelection() && !scheduleDao.isEmpty() && selName != null && !selName.isEmpty();
+if (trackDiff) {
+oldSnapshot = loadSelectionSnapshot(selType, selName);
+}
 scheduleDao.replaceAll(all);
+if (trackDiff && oldSnapshot != null && !oldSnapshot.isEmpty()) {
+List<ScheduleItem> newSnapshot = loadSelectionSnapshot(selType, selName);
+ScheduleDiff diff = ScheduleDiff.compute(selType, selName, oldSnapshot, newSnapshot);
+if (diff.hasChanges()) {
+String json = diff.toJson();
+if (json != null) {
+prefsManager.saveScheduleDiffJson(json);
+}
+}
+}
+}
+
+private List<ScheduleItem> loadSelectionSnapshot(String selType, String selName) {
+List<ScheduleItem> snapshot = new ArrayList<>();
+boolean isGroup = "group".equals(selType);
+if (isGroup) {
+snapshot.addAll(scheduleDao.getScheduleForGroup(selName, Constants.WEEK_TYPE_ODD));
+snapshot.addAll(scheduleDao.getScheduleForGroup(selName, Constants.WEEK_TYPE_EVEN));
+} else {
+snapshot.addAll(scheduleDao.getScheduleForTeacher(selName, Constants.WEEK_TYPE_ODD));
+snapshot.addAll(scheduleDao.getScheduleForTeacher(selName, Constants.WEEK_TYPE_EVEN));
+}
+return snapshot;
 }
 public void parseAndSaveTransfers(File xlsx, LoadCallback cb) throws Exception {
 List<TransferItem> items;

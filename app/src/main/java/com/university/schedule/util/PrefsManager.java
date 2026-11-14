@@ -81,10 +81,46 @@ public class PrefsManager {
     }
 
     public static final String PREF_FIRST_LAUNCH = "pref_first_launch";
+    public static final String PREF_REDUCED_TRANSPARENCY = "reduced_transparency";
+    public static final String PREF_LIVE_LESSON_NOTIF_ENABLED = "live_lesson_notif_enabled";
+    public static final String PREF_ATTENDANCE_SKIP_LIMIT_PCT = "attendance_skip_limit_pct";
+    public static final String PREF_SCHEDULE_DIFF_JSON = "schedule_diff_json";
+
     public boolean isFirstLaunch() {
         return prefs.getBoolean(PREF_FIRST_LAUNCH, true);
     }
     public void setFirstLaunchCompleted(boolean completed) {
         prefs.edit().putBoolean(PREF_FIRST_LAUNCH, !completed).apply();
+    }
+
+    public boolean isReducedTransparency() {
+        return prefs.getBoolean(PREF_REDUCED_TRANSPARENCY, false);
+    }
+    public void setReducedTransparency(boolean v) {
+        prefs.edit().putBoolean(PREF_REDUCED_TRANSPARENCY, v).apply();
+    }
+
+    public boolean isLiveLessonNotificationEnabled() {
+        return prefs.getBoolean(PREF_LIVE_LESSON_NOTIF_ENABLED, true);
+    }
+    public void setLiveLessonNotificationEnabled(boolean v) {
+        prefs.edit().putBoolean(PREF_LIVE_LESSON_NOTIF_ENABLED, v).apply();
+    }
+
+    public int getAttendanceSkipLimitPercent() {
+        return prefs.getInt(PREF_ATTENDANCE_SKIP_LIMIT_PCT, 30);
+    }
+    public void setAttendanceSkipLimitPercent(int pct) {
+        prefs.edit().putInt(PREF_ATTENDANCE_SKIP_LIMIT_PCT, pct).apply();
+    }
+
+    public String getScheduleDiffJson() {
+        return prefs.getString(PREF_SCHEDULE_DIFF_JSON, null);
+    }
+    public void saveScheduleDiffJson(String json) {
+        prefs.edit().putString(PREF_SCHEDULE_DIFF_JSON, json).apply();
+    }
+    public void clearScheduleDiff() {
+        prefs.edit().remove(PREF_SCHEDULE_DIFF_JSON).apply();
     }
 }

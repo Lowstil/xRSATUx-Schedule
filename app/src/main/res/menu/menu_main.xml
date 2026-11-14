@@ -7,12 +7,20 @@
         android:title="@string/action_refresh"
         app:showAsAction="ifRoom" />
     <item
-        android:id="@+id/action_bell_schedule"
-        android:title="Расписание звонков"
+        android:id="@+id/action_attendance"
+        android:title="Посещаемость"
         app:showAsAction="never" />
     <item
-        android:id="@+id/action_attendance"
-        android:title="Моя посещаемость"
+        android:id="@+id/action_room_finder"
+        android:title="Свободные аудитории / Преподаватель"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_schedule_diff"
+        android:title="Что изменилось"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_bell_schedule"
+        android:title="Расписание звонков"
         app:showAsAction="never" />
     <item
         android:id="@+id/action_settings"

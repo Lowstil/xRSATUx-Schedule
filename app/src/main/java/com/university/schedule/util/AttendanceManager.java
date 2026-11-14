@@ -25,7 +25,15 @@ import java.util.Set;
  */
 public class AttendanceManager {
     public static final int DEFAULT_WARNING_THRESHOLD = 3;
+    public static final String PREF_SKIP_LIMIT_PCT = "attendance_skip_limit_pct";
+    public static final int DEFAULT_SKIP_LIMIT_PCT = 30;
     private static final String PREF_ATTENDANCE_MANUAL_PREFIX = "att_manual_";
+
+    public enum BudgetHealth {
+        SAFE,
+        WARNING,
+        EXCEEDED
+    }
 
     public static class SubjectAttendance {
         public final String subjectName;
@@ -114,8 +122,28 @@ public class AttendanceManager {
         return null;
     }
 
+    public int getSkipLimitPercent() {
+        int pct = prefs.getInt(PREF_SKIP_LIMIT_PCT, DEFAULT_SKIP_LIMIT_PCT);
+        if (pct != 20 && pct != 25 && pct != 30) {
+            return DEFAULT_SKIP_LIMIT_PCT;
+        }
+        return pct;
+    }
+
+    public void setSkipLimitPercent(int pct) {
+        int normalized = (pct == 20 || pct == 25 || pct == 30) ? pct : DEFAULT_SKIP_LIMIT_PCT;
+        prefs.edit().putInt(PREF_SKIP_LIMIT_PCT, normalized).apply();
+    }
+
     public void adjustManualSkips(String groupName, String subjectName, int delta) {
         if (groupName == null || subjectName == null) return;
+        if (delta < 0) {
+            Map<String, SubjectAttendance> map = getStatsMap(groupName);
+            SubjectAttendance sa = map.get(subjectName.trim());
+            if (sa != null && sa.missedCount <= 0) {
+                return;
+            }
+        }
         String key = PREF_ATTENDANCE_MANUAL_PREFIX + groupName.trim() + "_" + subjectName.trim();
         int current = prefs.getInt(key, 0);
         int next = current + delta;
@@ -253,5 +281,63 @@ public class AttendanceManager {
         if (rem10 == 1) return count + " Н-ка";
         if (rem10 >= 2 && rem10 <= 4) return count + " Н-ки";
         return count + " Н-ок";
+    }
+
+    public static String formatLessonsCount(int count) {
+        int abs = Math.abs(count);
+        int rem100 = abs % 100;
+        int rem10 = abs % 10;
+        if (rem100 >= 11 && rem100 <= 19) return count + " пар";
+        if (rem10 == 1) return count + " пара";
+        if (rem10 >= 2 && rem10 <= 4) return count + " пары";
+        return count + " пар";
+    }
+
+    public static int computeSkipPercent(int missedCount, int totalPlanned) {
+        if (totalPlanned <= 0 || missedCount <= 0) return 0;
+        return Math.round((float) missedCount * 100f / totalPlanned);
+    }
+
+    public static int computeMaxAllowedSkips(int totalPlanned, int skipLimitPct) {
+        if (totalPlanned <= 0 || skipLimitPct <= 0) return 0;
+        return (int) Math.floor(totalPlanned * (skipLimitPct / 100.0));
+    }
+
+    public static int computeRemainingSkipBudget(int missedCount, int totalPlanned, int skipLimitPct) {
+        int maxAllowed = computeMaxAllowedSkips(totalPlanned, skipLimitPct);
+        return maxAllowed - Math.max(0, missedCount);
+    }
+
+    public static BudgetHealth evaluateBudgetHealth(int missedCount, int totalPlanned, int skipLimitPct) {
+        if (totalPlanned <= 0) return BudgetHealth.SAFE;
+        int remaining = computeRemainingSkipBudget(missedCount, totalPlanned, skipLimitPct);
+        if (remaining < 0) {
+            return BudgetHealth.EXCEEDED;
+        }
+        if (remaining == 1 || (remaining == 0 && missedCount > 0)) {
+            return BudgetHealth.WARNING;
+        }
+        return BudgetHealth.SAFE;
+    }
+
+    public static String formatBudgetStatus(int missedCount, int totalPlanned, int skipLimitPct) {
+        if (totalPlanned <= 0) {
+            return "Нет проведённых пар";
+        }
+        int remaining = computeRemainingSkipBudget(missedCount, totalPlanned, skipLimitPct);
+        int skipPct = computeSkipPercent(missedCount, totalPlanned);
+        if (remaining < 0) {
+            return "Лимит превышен! (" + skipPct + "%)";
+        }
+        if (remaining == 1) {
+            return "Последний запас: 1 пара";
+        }
+        if (remaining == 0) {
+            if (missedCount <= 0) {
+                return "Пропусков нет · запас 0 пар";
+            }
+            return "Запас исчерпан (" + skipPct + "%)";
+        }
+        return "Можно пропустить ещё " + formatLessonsCount(remaining);
     }
 }

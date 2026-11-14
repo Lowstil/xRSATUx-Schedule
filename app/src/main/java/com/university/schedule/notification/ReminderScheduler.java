@@ -30,6 +30,7 @@ public final class ReminderScheduler {
     public static void rescheduleAll(Context context) {
         scheduleNextReminder(context);
         scheduleMorningDigest(context);
+        LiveLessonService.syncNow(context);
     }
 
     public static void scheduleNextReminder(Context context) {

@@ -11,10 +11,10 @@
     android:clickable="true"
     android:focusable="true"
     android:foreground="?attr/selectableItemBackground"
-    app:cardCornerRadius="18dp"
-    app:cardElevation="2dp"
-    app:strokeWidth="1dp"
-    app:strokeColor="@color/outline">
+    app:cardBackgroundColor="@android:color/transparent"
+    app:cardCornerRadius="22dp"
+    app:cardElevation="0dp"
+    app:strokeWidth="0dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -22,18 +22,28 @@
         android:orientation="horizontal"
         android:padding="12dp">
 
+        <!-- 4dp vertical type pill on the left -->
+        <View
+            android:id="@+id/typePill"
+            android:layout_width="4dp"
+            android:layout_height="match_parent"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="4dp"
+            android:layout_marginEnd="10dp" />
+
         <LinearLayout
-            android:layout_width="56dp"
+            android:layout_width="52dp"
             android:layout_height="wrap_content"
             android:gravity="center_horizontal"
             android:orientation="vertical">
 
             <TextView
                 android:id="@+id/tvLessonNumber"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:fontFeatureSettings="tnum"
                 android:gravity="center"
-                android:textSize="18sp"
+                android:textSize="17sp"
                 android:textStyle="bold" />
 
             <TextView
@@ -41,7 +51,8 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:textColor="@color/text_primary"
+                android:fontFeatureSettings="tnum"
+                android:textColor="@color/glass_text_primary"
                 android:textSize="13sp"
                 android:textStyle="bold" />
 
@@ -49,21 +60,22 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="–"
-                android:textColor="@color/text_tertiary"
+                android:textColor="@color/glass_text_secondary"
                 android:textSize="11sp" />
 
             <TextView
                 android:id="@+id/tvTimeEnd"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="@color/text_secondary"
+                android:fontFeatureSettings="tnum"
+                android:textColor="@color/glass_text_secondary"
                 android:textSize="12sp" />
         </LinearLayout>
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
+            android:layout_marginStart="10dp"
             android:layout_weight="1"
             android:orientation="vertical">
 
@@ -88,10 +100,27 @@
                         android:background="@drawable/bg_state_dot" />
 
                     <TextView
+                        android:id="@+id/tvLiveBadge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:letterSpacing="0.06"
+                        android:paddingStart="8dp"
+                        android:paddingTop="2dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="2dp"
+                        android:text="LIVE"
+                        android:textColor="#FFFFFF"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:visibility="gone" />
+
+                    <TextView
                         android:id="@+id/tvState"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="6dp"
+                        android:fontFeatureSettings="tnum"
                         android:textSize="11sp"
                         android:textStyle="bold" />
                 </LinearLayout>
@@ -99,7 +128,7 @@
                 <LinearLayout
                     android:id="@+id/progressSegmentContainer"
                     android:layout_width="match_parent"
-                    android:layout_height="5dp"
+                    android:layout_height="6dp"
                     android:layout_marginTop="6dp"
                     android:orientation="horizontal"
                     android:visibility="gone">
@@ -152,7 +181,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:textColor="@color/text_primary"
+                    android:textColor="@color/glass_text_primary"
                     android:textSize="15sp"
                     android:textStyle="bold" />
 
@@ -165,7 +194,7 @@
                     android:paddingTop="3dp"
                     android:paddingEnd="8dp"
                     android:paddingBottom="3dp"
-                    android:textSize="12sp"
+                    android:textSize="11sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
@@ -174,8 +203,8 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:textColor="@color/text_secondary"
-                android:textSize="14sp" />
+                android:textColor="@color/glass_text_secondary"
+                android:textSize="13sp" />
 
             <TextView
                 android:id="@+id/tvTransferNote"
@@ -191,7 +220,7 @@
                 android:textStyle="bold"
                 android:visibility="gone" />
 
-                        <TextView
+            <TextView
                 android:id="@+id/tvAttendedBadge"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -202,12 +231,11 @@
                 android:paddingEnd="8dp"
                 android:paddingBottom="3dp"
                 android:text="✓ Посещено"
-                android:textColor="@color/badge_attended_text"
+                android:textColor="@color/glass_success"
                 android:textSize="11sp"
                 android:textStyle="bold"
                 android:visibility="gone" />
 
-<!-- Пометка "Не пойду" (пропуск пары по долгому нажатию) -->
             <TextView
                 android:id="@+id/tvSkippedBadge"
                 android:layout_width="wrap_content"
@@ -219,12 +247,11 @@
                 android:paddingEnd="8dp"
                 android:paddingBottom="3dp"
                 android:text="🔴 Н-ка"
-                android:textColor="@color/badge_nka_text"
+                android:textColor="@color/glass_danger"
                 android:textSize="11sp"
                 android:textStyle="bold"
                 android:visibility="gone" />
 
-            <!-- Пометка "Перезачёт" (исключённый предмет группы) -->
             <TextView
                 android:id="@+id/tvExemptBadge"
                 android:layout_width="wrap_content"
@@ -241,7 +268,6 @@
                 android:textStyle="bold"
                 android:visibility="gone" />
 
-            <!-- Предупреждение о количестве пропусков / энок -->
             <TextView
                 android:id="@+id/tvAttendanceWarning"
                 android:layout_width="wrap_content"
@@ -252,8 +278,7 @@
                 android:paddingTop="3dp"
                 android:paddingEnd="8dp"
                 android:paddingBottom="3dp"
-                android:text="🟡 Внимание: уже 3 пропуска, пора ходить!"
-                android:textColor="@color/badge_warning_text"
+                android:textColor="@color/glass_warning"
                 android:textSize="11sp"
                 android:textStyle="bold"
                 android:visibility="gone" />
@@ -273,7 +298,7 @@
                     android:id="@+id/tvBuilding"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textSize="14sp"
+                    android:textSize="13sp"
                     android:textStyle="bold" />
 
                 <TextView
@@ -281,6 +306,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="1dp"
+                    android:fontFeatureSettings="tnum"
                     android:textSize="12sp" />
             </LinearLayout>
 
@@ -289,7 +315,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:textColor="@color/text_tertiary"
+                android:textColor="@color/glass_text_secondary"
                 android:textSize="13sp"
                 android:visibility="gone" />
 
@@ -298,11 +324,11 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
-                android:textColor="@color/accent"
+                android:fontFeatureSettings="tnum"
+                android:textColor="@color/glass_accent"
                 android:textSize="11sp"
                 android:visibility="gone" />
 
-            <!-- Плашка личной заметки / домашнего задания к этой паре -->
             <LinearLayout
                 android:id="@+id/noteBadge"
                 android:layout_width="wrap_content"
@@ -322,7 +348,7 @@
                     android:layout_width="14dp"
                     android:layout_height="14dp"
                     android:src="@drawable/ic_edit_note"
-                    app:tint="@color/accent" />
+                    app:tint="@color/glass_accent" />
 
                 <TextView
                     android:id="@+id/tvNoteText"
@@ -331,7 +357,7 @@
                     android:layout_marginStart="6dp"
                     android:ellipsize="end"
                     android:maxLines="1"
-                    android:textColor="@color/text_primary"
+                    android:textColor="@color/glass_text_primary"
                     android:textSize="12sp" />
 
                 <ImageView
@@ -340,8 +366,8 @@
                     android:layout_height="14dp"
                     android:layout_marginStart="6dp"
                     android:src="@drawable/ic_photo_camera"
-                    app:tint="@color/text_secondary"
-                    android:visibility="gone" />
+                    android:visibility="gone"
+                    app:tint="@color/glass_text_secondary" />
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>

@@ -1,10 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Большинство стилей наследуются из values/themes.xml (parent теперь
-         DayNight, поэтому он общий) — здесь переопределяется только то, что
-         реально отличается для тёмного режима: сплэш-фон и статус-бар. -->
+    <style name="Theme.UniSchedule" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/glass_accent</item>
+        <item name="colorPrimaryDark">@color/primary_dark</item>
+        <item name="colorAccent">@color/glass_accent</item>
+        <item name="colorSurface">@color/glass_surface_strong</item>
+        <item name="colorOnSurface">@color/glass_text_primary</item>
+        <item name="colorControlNormal">@color/glass_text_secondary</item>
+        <item name="colorControlActivated">@color/glass_accent</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowBackground">@color/glass_backdrop_base</item>
+        <item name="android:textColorPrimary">@color/glass_text_primary</item>
+        <item name="android:textColorSecondary">@color/glass_text_secondary</item>
+        <item name="materialCardViewStyle">@style/Widget.UniSchedule.CardView</item>
+        <item name="materialButtonOutlinedStyle">@style/Widget.UniSchedule.Button.Outlined</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.UniSchedule.Dialog</item>
+    </style>
+
     <style name="Theme.UniSchedule.Splash" parent="Theme.UniSchedule">
         <item name="android:windowBackground">@drawable/bg_splash_gradient</item>
-        <item name="android:statusBarColor">@color/primary_dark</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>

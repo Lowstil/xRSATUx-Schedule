@@ -10,7 +10,9 @@ import com.university.schedule.data.db.ScheduleContract.ScheduleEntry;
 import com.university.schedule.model.ScheduleItem;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /** CRUD для таблицы schedule. Поиск по группе/преподавателю — точным равенством. */
 public class ScheduleDao {
@@ -65,6 +67,61 @@ public class ScheduleDao {
                 ScheduleEntry.COLUMN_WEEK_TYPE + " = ?";
         String[] args = {teacherName, SOURCE_TEACHER, weekType};
         return query(selection, args);
+    }
+
+    /** Строки листа "преподаватели" для конкретного преподавателя, типа недели и дня недели. */
+    public List<ScheduleItem> getTeacherScheduleForDay(String teacherName, String weekType, int dayOfWeek) {
+        if (teacherName == null || weekType == null) return new ArrayList<>();
+        String selection = ScheduleEntry.COLUMN_TEACHER_NAME + " = ? AND " +
+                ScheduleEntry.COLUMN_SOURCE + " = ? AND " +
+                ScheduleEntry.COLUMN_WEEK_TYPE + " = ? AND " +
+                ScheduleEntry.COLUMN_DAY_OF_WEEK + " = ?";
+        String[] args = {teacherName.trim(), SOURCE_TEACHER, weekType, String.valueOf(dayOfWeek)};
+        return query(selection, args);
+    }
+
+    /** Уникальный список всех аудиторий из БД, отсортированный по алфавиту. */
+    public List<String> extractDistinctRooms() {
+        List<String> result = new ArrayList<>();
+        SQLiteDatabase db = dbHelper.getReadableDatabase();
+        String sql = "SELECT DISTINCT " + ScheduleEntry.COLUMN_ROOM + " FROM " + ScheduleEntry.TABLE_NAME +
+                " WHERE " + ScheduleEntry.COLUMN_ROOM + " IS NOT NULL AND " + ScheduleEntry.COLUMN_ROOM + " != '' " +
+                "ORDER BY " + ScheduleEntry.COLUMN_ROOM + " COLLATE NOCASE ASC";
+        try (Cursor cursor = db.rawQuery(sql, null)) {
+            while (cursor.moveToNext()) {
+                String value = cursor.getString(0);
+                if (value != null && !value.trim().isEmpty() && !result.contains(value.trim())) {
+                    result.add(value.trim());
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Ошибка выборки аудиторий", e);
+        }
+        return result;
+    }
+
+    /** Множество аудиторий, занятых на заданной паре в заданный день и тип недели. */
+    public Set<String> getOccupiedRooms(String weekType, int dayOfWeek, int lessonNumber) {
+        Set<String> occupied = new HashSet<>();
+        if (weekType == null) return occupied;
+        SQLiteDatabase db = dbHelper.getReadableDatabase();
+        String sql = "SELECT DISTINCT " + ScheduleEntry.COLUMN_ROOM + " FROM " + ScheduleEntry.TABLE_NAME +
+                " WHERE " + ScheduleEntry.COLUMN_WEEK_TYPE + " = ? AND " +
+                ScheduleEntry.COLUMN_DAY_OF_WEEK + " = ? AND " +
+                ScheduleEntry.COLUMN_LESSON_NUMBER + " = ? AND " +
+                ScheduleEntry.COLUMN_ROOM + " IS NOT NULL AND " + ScheduleEntry.COLUMN_ROOM + " != ''";
+        String[] args = {weekType, String.valueOf(dayOfWeek), String.valueOf(lessonNumber)};
+        try (Cursor cursor = db.rawQuery(sql, args)) {
+            while (cursor.moveToNext()) {
+                String value = cursor.getString(0);
+                if (value != null && !value.trim().isEmpty()) {
+                    occupied.add(value.trim());
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Ошибка выборки занятых аудиторий", e);
+        }
+        return occupied;
     }
 
     public boolean isEmpty() {
