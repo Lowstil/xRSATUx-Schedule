@@ -14,6 +14,7 @@ import androidx.core.content.ContextCompat;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.tabs.TabLayout;
 import com.university.schedule.R;
+import com.university.schedule.ui.glass.GlassSurfaceHelper;
 import com.university.schedule.util.Constants;
 import com.university.schedule.util.DateUtils;
 
@@ -63,6 +64,7 @@ public final class BellScheduleDialog {
 
         btnClose.setOnClickListener(v -> dialog.dismiss());
         dialog.show();
+        GlassSurfaceHelper.applyGlassDialog(dialog, view);
 
         if (dialog.getWindow() != null) {
             android.util.DisplayMetrics dm = context.getResources().getDisplayMetrics();

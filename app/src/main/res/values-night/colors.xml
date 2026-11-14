@@ -70,4 +70,26 @@
     <!-- Бейдж предупреждения о посещаемости -->
     <color name="badge_warning_bg">#33F59E0B</color>
     <color name="badge_warning_text">#FBBF24</color>
+
+    <!-- Liquid Glass tokens (Dark) -->
+    <color name="glass_surface">#99182032</color>
+    <color name="glass_surface_strong">#CC1E2840</color>
+    <color name="glass_surface_fallback">#D9182032</color>
+    <color name="glass_capsule">#B3222C44</color>
+    <color name="glass_stroke_start">#52FFFFFF</color>
+    <color name="glass_stroke_mid">#14FFFFFF</color>
+    <color name="glass_stroke_end">#26FFFFFF</color>
+    <color name="glass_text_primary">#F3F6FC</color>
+    <color name="glass_text_secondary">#9AA6BF</color>
+    <color name="glass_accent">#6C8CFF</color>
+    <color name="glass_success">#34D399</color>
+    <color name="glass_warning">#FBBF24</color>
+    <color name="glass_danger">#F87171</color>
+
+    <!-- Ambient Mesh Backdrop (Dark) -->
+    <color name="glass_backdrop_base">#0B0F1A</color>
+    <color name="glass_backdrop_blob1">#1E2B58</color>
+    <color name="glass_backdrop_blob2">#2B1B4D</color>
+    <color name="glass_backdrop_blob3">#0F3847</color>
+    <color name="glass_backdrop_blob_warm">#3D2418</color>
 </resources>

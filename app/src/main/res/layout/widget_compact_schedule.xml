@@ -3,10 +3,10 @@
     android:id="@+id/compactWidgetRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_widget"
+    android:background="@drawable/bg_widget_compact"
     android:gravity="center_vertical"
     android:orientation="vertical"
-    android:padding="10dp">
+    android:padding="12dp">
 
     <!-- Верхняя строка: статус/тип пары + время/обратный отсчёт + аудитория -->
     <LinearLayout
@@ -113,6 +113,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="2dp"
         android:ellipsize="end"
+        android:fontFeatureSettings="tnum"
         android:maxLines="1"
         android:text="Звонок в 10:10"
         android:textColor="#FF8AB4F8"

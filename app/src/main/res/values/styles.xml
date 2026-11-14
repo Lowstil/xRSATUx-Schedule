@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tabular numerals (tnum) for aligned lesson times, countdowns, and percentages -->
+    <style name="TextAppearance.UniSchedule.TabularNumerals" parent="TextAppearance.MaterialComponents.Body2">
+        <item name="android:fontFeatureSettings">tnum</item>
+    </style>
+
+    <style name="Widget.UniSchedule.Text.Tabular" parent="android:Widget.TextView">
+        <item name="android:fontFeatureSettings">tnum</item>
+    </style>
+
+    <!-- Primary Liquid Glass pill button -->
+    <style name="Widget.UniSchedule.Button.Pill" parent="Widget.MaterialComponents.Button">
+        <item name="cornerRadius">999dp</item>
+        <item name="backgroundTint">@color/glass_accent</item>
+        <item name="android:textColor">#FFFFFF</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:letterSpacing">0</item>
+        <item name="android:minHeight">44dp</item>
+        <item name="elevation">0dp</item>
+    </style>
+
+    <!-- Translucent Liquid Glass capsule button -->
+    <style name="Widget.UniSchedule.Button.Pill.Glass" parent="Widget.MaterialComponents.Button.OutlinedButton">
+        <item name="cornerRadius">999dp</item>
+        <item name="backgroundTint">@color/glass_capsule</item>
+        <item name="strokeColor">@color/glass_stroke_start</item>
+        <item name="strokeWidth">1dp</item>
+        <item name="android:textColor">@color/glass_text_primary</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:letterSpacing">0</item>
+        <item name="android:minHeight">44dp</item>
+        <item name="rippleColor">@color/glass_stroke_start</item>
+    </style>
+</resources>

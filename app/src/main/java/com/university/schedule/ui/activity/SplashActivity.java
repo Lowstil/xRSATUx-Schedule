@@ -7,6 +7,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.university.schedule.R;
 import com.university.schedule.data.ScheduleRepository;
+import com.university.schedule.ui.glass.GlassSurfaceHelper;
 import com.university.schedule.util.AppError;
 import com.university.schedule.util.EdgeToEdgeCompat;
 import com.university.schedule.util.PrefsManager;
@@ -15,23 +16,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Экран загрузки. ВАЖНО: раньше navigate() вызывался из Handler на главном
- * потоке и делал там же ScheduleRepository.getInstance() (чтение БД) и,
- * в худшем случае, loadFromCache() — полный разбор кэшированного .xlsx
- * расписания И .xlsx переносов через Apache POI плюс запись сотен строк в
- * SQLite. На реальных файлах это занимает больше 5 секунд, и Android
- * показывает "Приложение не отвечает" (ANR). Теперь вся эта работа
- * выполняется в фоновом потоке, а на UI-поток возвращается только готовое
- * решение "куда переходить".
- *
- * Задача 5 (автообновление раз в сутки): после того как решение о переходе
- * принято и НЕЗАВИСИМО от него, отдельно проверяем ScheduleRepository.
- * shouldAutoRefresh() и, если пора, запускаем скачивание в фоне — уже ПОСЛЕ
- * того, как пользователь увидел расписание, чтобы не задерживать запуск
- * приложения ожиданием сети. Если автообновление успешно завершится, пока
- * MainActivity уже открыт, пользователь просто увидит обновлённые данные
- * при следующем действии (смене недели/дня) — навязчивых уведомлений об
- * этом фоновом обновлении намеренно нет.
+ * Экран загрузки. Вся тяжёлая инициализация выполняется в фоновом потоке,
+ * а на UI-поток возвращается только решение о навигации.
  */
 public class SplashActivity extends AppCompatActivity {
 
@@ -40,8 +26,10 @@ public class SplashActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle s) {
         super.onCreate(s);
+        EdgeToEdgeCompat.enableEdgeToEdge(this);
         setContentView(R.layout.activity_splash);
-        EdgeToEdgeCompat.applyEdgeToEdgeInsets(this);
+        EdgeToEdgeCompat.applySystemBarInsets(findViewById(R.id.splashContent), true, true);
+        GlassSurfaceHelper.applyGlassCard(findViewById(R.id.splashCard), 28f, true);
         ex.execute(this::resolveDestination);
     }
 
@@ -62,10 +50,6 @@ public class SplashActivity extends AppCompatActivity {
             finish();
         });
 
-        // Автообновление раз в сутки — запускается ПОСЛЕ решения о навигации
-        // (пользователь уже увидит расписание без задержки на сеть), но всё
-        // ещё в этом же фоновом потоке Splash, отдельно от UI. Если выбор
-        // группы/преподавателя ещё не сделан — обновлять нечего, пропускаем.
         if (p.hasSelection()) {
             r.maybeAutoRefresh(new ScheduleRepository.LoadCallback() {
                 @Override public void onSuccess() { }

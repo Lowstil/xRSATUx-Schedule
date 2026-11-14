@@ -16,6 +16,7 @@ import com.university.schedule.R;
 import com.university.schedule.data.ScheduleRepository;
 import com.university.schedule.model.GroupOrTeacher;
 import com.university.schedule.ui.adapter.SelectionAdapter;
+import com.university.schedule.ui.glass.GlassSurfaceHelper;
 import com.university.schedule.util.AppError;
 import com.university.schedule.util.EdgeToEdgeCompat;
 import com.university.schedule.util.FavoritesManager;
@@ -48,8 +49,12 @@ public class SelectionActivity extends AppCompatActivity implements SelectionAda
     @Override
     protected void onCreate(Bundle s) {
         super.onCreate(s);
+        EdgeToEdgeCompat.enableEdgeToEdge(this);
         setContentView(R.layout.activity_selection);
-        EdgeToEdgeCompat.applyEdgeToEdgeInsets(this);
+
+        EdgeToEdgeCompat.applySystemBarInsets(findViewById(R.id.selectionContent), true, false);
+        GlassSurfaceHelper.applyGlassCard(findViewById(R.id.toggleCapsule), 999f, false);
+        GlassSurfaceHelper.applyGlassCard(findViewById(R.id.searchCapsule), 999f, false);
 
         repo = ScheduleRepository.getInstance(this);
         currentName = repo.getSelectionName();
@@ -65,6 +70,8 @@ public class SelectionActivity extends AppCompatActivity implements SelectionAda
         progressBar = findViewById(R.id.progressBar);
         tvEmpty = findViewById(R.id.tvEmpty);
         tvStatus = findViewById(R.id.tvStatus);
+
+        EdgeToEdgeCompat.applySystemBarInsets(recyclerView, false, true);
 
         adapter = new SelectionAdapter(filtered, this);
         adapter.setCurrentSelection(currentName, currentType);
@@ -182,7 +189,6 @@ public class SelectionActivity extends AppCompatActivity implements SelectionAda
     @Override
     public void onItemSelected(GroupOrTeacher it) {
         repo.saveSelection(it.getType(), it.getName());
-        // Добавляем выбранную группу в избранное автоматически, если там еще нет
         FavoritesManager.addFavorite(this, it.getType(), it.getName());
         Intent intent = new Intent(this, MainActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);

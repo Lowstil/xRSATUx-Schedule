@@ -25,10 +25,10 @@ import java.util.List;
  */
 public class ScheduleWidgetFactory implements RemoteViewsService.RemoteViewsFactory {
     private final Context context;
-    private List<ScheduleItem> lessons = new ArrayList<>();
+    private volatile List<ScheduleItem> lessons = new ArrayList<>();
 
     public ScheduleWidgetFactory(Context context) {
-        this.context = context;
+        this.context = context.getApplicationContext();
     }
 
     @Override
@@ -56,7 +56,11 @@ public class ScheduleWidgetFactory implements RemoteViewsService.RemoteViewsFact
             DaySchedule today = isGroup
                     ? repo.getTodayScheduleForGroup(selName)
                     : repo.getTodayScheduleForTeacher(selName);
-            lessons = (today != null && today.hasLessons()) ? today.getLessons() : new ArrayList<>();
+            if (today != null && today.hasLessons() && today.getLessons() != null) {
+                lessons = new ArrayList<>(today.getLessons());
+            } else {
+                lessons = new ArrayList<>();
+            }
         } catch (Exception e) {
             lessons = new ArrayList<>();
         }
@@ -69,14 +73,18 @@ public class ScheduleWidgetFactory implements RemoteViewsService.RemoteViewsFact
 
     @Override
     public int getCount() {
-        return lessons.size();
+        List<ScheduleItem> snapshot = lessons;
+        return snapshot != null ? snapshot.size() : 0;
     }
 
     @Override
     public RemoteViews getViewAt(int position) {
         RemoteViews row = new RemoteViews(context.getPackageName(), R.layout.widget_item_lesson);
-        if (position < 0 || position >= lessons.size()) return row;
-        ScheduleItem it = lessons.get(position);
+        List<ScheduleItem> snapshot = lessons;
+        if (snapshot == null || position < 0 || position >= snapshot.size()) {
+            return row;
+        }
+        ScheduleItem it = snapshot.get(position);
         int n = it.getLessonNumber();
         // Перенесённые занятия привязаны к дате напрямую (dayOfWeek=0),
         // поэтому время звонка берём по-реальному "сегодня".
@@ -84,8 +92,8 @@ public class ScheduleWidgetFactory implements RemoteViewsService.RemoteViewsFact
         String time = Constants.getLessonTimeLabel(dow, n);
 
         row.setTextViewText(R.id.widgetLessonNumber, String.valueOf(n));
-        row.setTextViewText(R.id.widgetLessonTime, time);
-        row.setTextViewText(R.id.widgetLessonSubject, it.getSubjectName());
+        row.setTextViewText(R.id.widgetLessonTime, time != null ? time : "");
+        row.setTextViewText(R.id.widgetLessonSubject, it.getSubjectName() != null ? it.getSubjectName() : "");
 
         // --- тип занятия: цветной код (Л/П/ЛР/оЛ/оП/ЭКЗ) ---
         String code = shortType(it.getLessonType());
@@ -98,25 +106,36 @@ public class ScheduleWidgetFactory implements RemoteViewsService.RemoteViewsFact
         }
 
         // --- аудитория: корпус + кабинет, тёмная палитра виджета ---
-        RoomFormatter.RoomInfo ri = RoomFormatter.parse(it.getRoom(), true);
-        String roomText = "";
-        if (ri != null) {
-            roomText = (ri.room != null && !ri.room.isEmpty())
-                    ? (ri.building + ", " + ri.room)
-                    : (ri.building != null ? ri.building : "");
+        String roomText = formatRoom(it.getRoom());
+        if (roomText.isEmpty()) {
+            row.setViewVisibility(R.id.widgetLessonRoom, View.GONE);
+        } else {
+            row.setViewVisibility(R.id.widgetLessonRoom, View.VISIBLE);
+            row.setTextViewText(R.id.widgetLessonRoom, roomText);
         }
-        row.setTextViewText(R.id.widgetLessonRoom, roomText);
 
-        // --- отменённое занятие приглушаем ---
-        int alpha = it.isCancelled() ? 128 : 255;
-        row.setInt(R.id.widgetLessonSubject, "setAlpha", alpha);
-        row.setInt(R.id.widgetLessonTime, "setAlpha", alpha);
-        row.setInt(R.id.widgetLessonRoom, "setAlpha", alpha);
+        // --- отменённое занятие приглушаем через View.setAlpha(float) ---
+        float alpha = it.isCancelled() ? 0.5f : 1.0f;
+        row.setFloat(R.id.widgetLessonSubject, "setAlpha", alpha);
+        row.setFloat(R.id.widgetLessonTime, "setAlpha", alpha);
+        row.setFloat(R.id.widgetLessonRoom, "setAlpha", alpha);
 
         Intent fillInIntent = new Intent();
-        row.setOnClickFillInIntent(R.id.widgetLessonSubject, fillInIntent);
-        row.setOnClickFillInIntent(R.id.widgetLessonNumber, fillInIntent);
+        row.setOnClickFillInIntent(R.id.widgetLessonRow, fillInIntent);
         return row;
+    }
+
+    private static String formatRoom(String rawRoom) {
+        RoomFormatter.RoomInfo ri = RoomFormatter.parse(rawRoom, true);
+        if (ri == null) return rawRoom != null ? rawRoom.trim() : "";
+        boolean hasBuilding = ri.building != null && !ri.building.isEmpty();
+        boolean hasRoom = ri.room != null && !ri.room.isEmpty();
+        if (hasBuilding && hasRoom) {
+            return ri.building + ", " + ri.room;
+        }
+        if (hasRoom) return ri.room;
+        if (hasBuilding) return ri.building;
+        return "";
     }
 
     /** Цвет кода типа занятия под тёмный фон виджета. */
