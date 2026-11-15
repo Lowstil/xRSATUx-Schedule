@@ -12,6 +12,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.SparseArray;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -81,8 +82,10 @@ import java.io.OutputStream;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -119,6 +122,9 @@ public class MainActivity extends AppCompatActivity {
     private DayPagerAdapter pagerAdapter;
     private ScheduleRepository repo;
     private WeekCalculator calc;
+    private final SparseArray<WeekSchedule> weekCache = new SparseArray<>();
+    private final Set<Integer> loadingWeeks = new HashSet<>();
+    private int selectionGeneration = 0;
     private WeekSchedule currentWeek;
     private String selType, selName;
     private int weekNum, dayIndex;
@@ -182,8 +188,11 @@ public class MainActivity extends AppCompatActivity {
         tvTodayDate.setText(DateUtils.formatDisplayDateShort(DateUtils.todayMoscow()));
         tvTodayDate.setOnClickListener(v -> {
             initWeekForDate(DateUtils.todayMoscow());
+            currentWeek = weekCache.get(weekNum);
+            updateWeekHeaderUi();
+            updateDayTabsForWeek();
+            selectPage(weekNum, dayIndex, true);
             loadWeek();
-            selectDayPage(dayIndex, true);
         });
 
         if (btnSettings != null) {
@@ -244,17 +253,17 @@ public class MainActivity extends AppCompatActivity {
 
         viewPager.setAdapter(pagerAdapter);
         viewPager.setOffscreenPageLimit(2);
-        viewPager.setCurrentItem(dayIndex, false);
+        viewPager.setCurrentItem(DayPagerAdapter.positionOf(weekNum, dayIndex), false);
 
         buildDayTabs();
-        selectDayPage(dayIndex, false);
+        selectPage(weekNum, dayIndex, false);
 
         tabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override
             public void onTabSelected(TabLayout.Tab t) {
                 if (suppressTabCallback) return;
                 dayIndex = t.getPosition();
-                viewPager.setCurrentItem(dayIndex, true);
+                viewPager.setCurrentItem(DayPagerAdapter.positionOf(weekNum, dayIndex), true);
                 updateTabSelectionVisuals();
             }
 
@@ -268,14 +277,26 @@ public class MainActivity extends AppCompatActivity {
         viewPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
             public void onPageSelected(int position) {
-                dayIndex = position;
-                TabLayout.Tab tab = tabLayout.getTabAt(position);
+                int newWeek = DayPagerAdapter.weekOf(position);
+                int newDay = DayPagerAdapter.dayOf(position);
+                dayIndex = newDay;
+
+                TabLayout.Tab tab = tabLayout.getTabAt(newDay);
                 if (tab != null && !tab.isSelected()) {
                     suppressTabCallback = true;
                     tab.select();
                     suppressTabCallback = false;
+                    tabLayout.setScrollPosition(newDay, 0f, true);
                 }
                 updateTabSelectionVisuals();
+
+                if (newWeek != weekNum) {
+                    weekNum = newWeek;
+                    currentWeek = weekCache.get(weekNum);
+                    updateWeekHeaderUi();
+                    updateDayTabsForWeek();
+                    loadWeek();
+                }
             }
 
             @Override
@@ -296,15 +317,21 @@ public class MainActivity extends AppCompatActivity {
             if (weekNum > 1) {
                 weekNum--;
                 dayIndex = 0;
-                selectDayPage(0, true);
+                currentWeek = weekCache.get(weekNum);
+                updateWeekHeaderUi();
+                updateDayTabsForWeek();
+                selectPage(weekNum, 0, true);
                 loadWeek();
             }
         });
         btnNext.setOnClickListener(v -> {
-            if (weekNum < 18) {
+            if (weekNum < DayPagerAdapter.WEEK_COUNT) {
                 weekNum++;
                 dayIndex = 0;
-                selectDayPage(0, true);
+                currentWeek = weekCache.get(weekNum);
+                updateWeekHeaderUi();
+                updateDayTabsForWeek();
+                selectPage(weekNum, 0, true);
                 loadWeek();
             }
         });
@@ -430,6 +457,7 @@ public class MainActivity extends AppCompatActivity {
                     }
                     tvSelectionName.setText(selName);
                     tvSelectionType.setText(fav.isGroup() ? "Группа" : "Преподаватель");
+                    clearWeekCache();
                     loadWeek();
                     updateFavoritesBar();
                     if (attendanceManager != null) {
@@ -818,19 +846,22 @@ public class MainActivity extends AppCompatActivity {
         builtForDate = today;
     }
 
-    private void selectDayPage(int idx, boolean smoothScroll) {
-        if (idx < 0 || idx >= 6) idx = 0;
-        final int targetIdx = idx;
-        if (viewPager != null && viewPager.getCurrentItem() != targetIdx) {
-            viewPager.setCurrentItem(targetIdx, smoothScroll);
+    private void selectPage(int targetWeek, int targetDay, boolean smoothScroll) {
+        if (targetWeek < 1) targetWeek = 1;
+        if (targetWeek > DayPagerAdapter.WEEK_COUNT) targetWeek = DayPagerAdapter.WEEK_COUNT;
+        if (targetDay < 0 || targetDay >= DayPagerAdapter.DAYS_PER_WEEK) targetDay = 0;
+        final int targetPos = DayPagerAdapter.positionOf(targetWeek, targetDay);
+        final int finalDay = targetDay;
+        if (viewPager != null && viewPager.getCurrentItem() != targetPos) {
+            viewPager.setCurrentItem(targetPos, smoothScroll);
         }
         tabLayout.post(() -> {
-            TabLayout.Tab tab = tabLayout.getTabAt(targetIdx);
+            TabLayout.Tab tab = tabLayout.getTabAt(finalDay);
             if (tab != null) {
                 suppressTabCallback = true;
                 tab.select();
                 suppressTabCallback = false;
-                tabLayout.setScrollPosition(targetIdx, 0f, true);
+                tabLayout.setScrollPosition(finalDay, 0f, true);
             }
             updateTabSelectionVisuals();
         });
@@ -846,7 +877,8 @@ public class MainActivity extends AppCompatActivity {
             calc = repo.getWeekCalculator();
             initWeekForDate(today);
             tvTodayDate.setText(DateUtils.formatDisplayDateShort(today));
-            selectDayPage(dayIndex, false);
+            clearWeekCache();
+            selectPage(weekNum, dayIndex, false);
             loadWeek();
         }
         updateFavoritesBar();
@@ -963,20 +995,62 @@ public class MainActivity extends AppCompatActivity {
         updateTabSelectionVisuals();
     }
 
-    private void loadWeek() {
-        progressBar.setVisibility(View.VISIBLE);
+    private void updateWeekHeaderUi() {
         String label = (weekNum % 2 == 0) ? "Чётная" : "Нечётная";
         LocalDate mon = calc.getMondayOfWeek(weekNum);
         LocalDate sat = calc.getSaturdayOfWeek(weekNum);
         String range = (mon != null && sat != null) ? DateUtils.formatDisplayDate(mon) + " – " + DateUtils.formatDisplayDate(sat) : "";
         tvWeekInfo.setText("Неделя " + weekNum + " (" + label + ") · " + range);
         btnPrev.setAlpha(weekNum > 1 ? 1f : 0.3f);
-        btnNext.setAlpha(weekNum < 18 ? 1f : 0.3f);
+        btnNext.setAlpha(weekNum < DayPagerAdapter.WEEK_COUNT ? 1f : 0.3f);
+    }
+
+    private void clearWeekCache() {
+        selectionGeneration++;
+        weekCache.clear();
+        loadingWeeks.clear();
+        currentWeek = null;
+        if (pagerAdapter != null) {
+            pagerAdapter.clearWeeks();
+        }
+    }
+
+    private void loadWeek() {
+        updateWeekHeaderUi();
+
+        WeekSchedule cached = weekCache.get(weekNum);
+        if (cached != null) {
+            currentWeek = cached;
+            progressBar.setVisibility(View.GONE);
+            updateDayTabsForWeek();
+            updateClock();
+        } else {
+            progressBar.setVisibility(View.VISIBLE);
+            fetchWeekIfNeeded(weekNum);
+        }
+
+        if (weekNum > 1) {
+            fetchWeekIfNeeded(weekNum - 1);
+        }
+        if (weekNum < DayPagerAdapter.WEEK_COUNT) {
+            fetchWeekIfNeeded(weekNum + 1);
+        }
+    }
+
+    private void fetchWeekIfNeeded(final int targetWeek) {
+        if (targetWeek < 1 || targetWeek > DayPagerAdapter.WEEK_COUNT) return;
+        if (weekCache.get(targetWeek) != null || loadingWeeks.contains(targetWeek)) return;
+
+        loadingWeeks.add(targetWeek);
+        final int gen = selectionGeneration;
+        final String type = selType;
+        final String name = selName;
 
         ex.execute(() -> {
-            WeekSchedule ws = GroupOrTeacher.TYPE_GROUP.equals(selType)
-                    ? repo.getWeekScheduleForGroup(selName, weekNum)
-                    : repo.getWeekScheduleForTeacher(selName, weekNum);
+            if (gen != selectionGeneration) return;
+            WeekSchedule ws = GroupOrTeacher.TYPE_GROUP.equals(type)
+                    ? repo.getWeekScheduleForGroup(name, targetWeek)
+                    : repo.getWeekScheduleForTeacher(name, targetWeek);
             Map<String, Map<Integer, LessonNote>> notesMap = new HashMap<>();
             if (ws != null && ws.getDays() != null) {
                 for (DaySchedule d : ws.getDays()) {
@@ -987,12 +1061,19 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
             runOnUiThread(() -> {
-                currentWeek = ws;
-                progressBar.setVisibility(View.GONE);
-                pagerAdapter.setWeekSchedule(ws, notesMap);
-                updateDayTabsForWeek();
-                updateClock();
-                LiveLessonService.syncNow(this);
+                if (gen != selectionGeneration) return;
+                loadingWeeks.remove(targetWeek);
+                if (ws != null) {
+                    weekCache.put(targetWeek, ws);
+                }
+                pagerAdapter.setWeekSchedule(targetWeek, ws, notesMap);
+                if (targetWeek == weekNum) {
+                    currentWeek = ws;
+                    progressBar.setVisibility(View.GONE);
+                    updateDayTabsForWeek();
+                    updateClock();
+                    LiveLessonService.syncNow(this);
+                }
             });
         });
     }
@@ -1034,6 +1115,7 @@ public class MainActivity extends AppCompatActivity {
                     swipeRefresh.setRefreshing(false);
                     repo.refreshLogic();
                     calc = repo.getWeekCalculator();
+                    clearWeekCache();
                     loadWeek();
                     updateLastUpdatedBanner();
                     updateFavoritesBar();
