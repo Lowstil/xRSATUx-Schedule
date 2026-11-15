@@ -32,12 +32,13 @@ import java.util.Set;
 
 public class DayPagerAdapter extends RecyclerView.Adapter<DayPagerAdapter.PageViewHolder> {
 
-    private static final int PAGE_COUNT = 6;
+    public static final int WEEK_COUNT = 18;
+    public static final int DAYS_PER_WEEK = 6;
+    public static final int TOTAL_PAGES = WEEK_COUNT * DAYS_PER_WEEK;
 
     private final SparseArray<PageViewHolder> boundHolders = new SparseArray<>();
-
-    private WeekSchedule currentWeek;
-    private Map<String, Map<Integer, LessonNote>> notesByDate = new HashMap<>();
+    private final SparseArray<WeekSchedule> weekCache = new SparseArray<>();
+    private final Map<String, Map<Integer, LessonNote>> notesByDate = new HashMap<>();
     private ScheduleClock.State clockState;
     private ScheduleClock.LessonKey nextKey;
     private NextLesson nextLesson;
@@ -49,6 +50,26 @@ public class DayPagerAdapter extends RecyclerView.Adapter<DayPagerAdapter.PageVi
     private DayScheduleAdapter.OnLessonLongClickListener lessonLongClickListener;
     private int bottomInsetPx = 0;
 
+    public static int weekOf(int position) {
+        int clamped = clampPosition(position);
+        return (clamped / DAYS_PER_WEEK) + 1;
+    }
+
+    public static int dayOf(int position) {
+        int clamped = clampPosition(position);
+        return clamped % DAYS_PER_WEEK;
+    }
+
+    public static int positionOf(int weekNumber, int dayIndex) {
+        int w = Math.max(1, Math.min(WEEK_COUNT, weekNumber));
+        int d = Math.max(0, Math.min(DAYS_PER_WEEK - 1, dayIndex));
+        return (w - 1) * DAYS_PER_WEEK + d;
+    }
+
+    private static int clampPosition(int position) {
+        return Math.max(0, Math.min(TOTAL_PAGES - 1, position));
+    }
+
     public void setBottomInsetPx(int bottomInsetPx) {
         this.bottomInsetPx = bottomInsetPx;
         for (int i = 0; i < boundHolders.size(); i++) {
@@ -57,9 +78,26 @@ public class DayPagerAdapter extends RecyclerView.Adapter<DayPagerAdapter.PageVi
         }
     }
 
-    public void setWeekSchedule(WeekSchedule ws, Map<String, Map<Integer, LessonNote>> notesByDate) {
-        this.currentWeek = ws;
-        this.notesByDate = (notesByDate != null) ? notesByDate : new HashMap<>();
+    public void setWeekSchedule(int weekNumber, WeekSchedule ws, Map<String, Map<Integer, LessonNote>> weekNotes) {
+        if (weekNumber < 1 || weekNumber > WEEK_COUNT) return;
+        boolean weekChanged = weekCache.get(weekNumber) != ws;
+        if (ws != null) {
+            weekCache.put(weekNumber, ws);
+        } else {
+            weekCache.remove(weekNumber);
+        }
+        boolean notesChanged = weekNotes != null && !weekNotes.isEmpty();
+        if (notesChanged) {
+            this.notesByDate.putAll(weekNotes);
+        }
+        if (weekChanged || notesChanged) {
+            notifyItemRangeChanged((weekNumber - 1) * DAYS_PER_WEEK, DAYS_PER_WEEK);
+        }
+    }
+
+    public void clearWeeks() {
+        weekCache.clear();
+        notesByDate.clear();
         notifyDataSetChanged();
     }
 
@@ -70,14 +108,26 @@ public class DayPagerAdapter extends RecyclerView.Adapter<DayPagerAdapter.PageVi
         } else {
             notesByDate.remove(dateIso);
         }
-        notifyDataSetChanged();
+        for (int i = 0; i < boundHolders.size(); i++) {
+            int pos = boundHolders.keyAt(i);
+            PageViewHolder h = boundHolders.valueAt(i);
+            if (h != null) {
+                bindPage(h, pos);
+            }
+        }
     }
 
     public void applyClock(ScheduleClock.State state, ScheduleClock.LessonKey nextKey, NextLesson nextLesson) {
         this.clockState = state;
         this.nextKey = nextKey;
         this.nextLesson = nextLesson;
-        notifyDataSetChanged();
+        for (int i = 0; i < boundHolders.size(); i++) {
+            int pos = boundHolders.keyAt(i);
+            PageViewHolder h = boundHolders.valueAt(i);
+            if (h != null) {
+                bindPage(h, pos);
+            }
+        }
     }
 
     public void setExcludedSubjects(Set<String> subjects) {
@@ -110,7 +160,7 @@ public class DayPagerAdapter extends RecyclerView.Adapter<DayPagerAdapter.PageVi
 
     @Override
     public int getItemCount() {
-        return PAGE_COUNT;
+        return TOTAL_PAGES;
     }
 
     @NonNull
@@ -123,6 +173,10 @@ public class DayPagerAdapter extends RecyclerView.Adapter<DayPagerAdapter.PageVi
     @Override
     public void onBindViewHolder(@NonNull PageViewHolder holder, int position) {
         boundHolders.put(position, holder);
+        bindPage(holder, position);
+    }
+
+    private void bindPage(@NonNull PageViewHolder holder, int position) {
         holder.applyBottomPadding(bottomInsetPx);
 
         DayScheduleAdapter dayAdapter = holder.dayAdapter;
@@ -132,7 +186,11 @@ public class DayPagerAdapter extends RecyclerView.Adapter<DayPagerAdapter.PageVi
         dayAdapter.setOnLessonClickListener(lessonClickListener);
         dayAdapter.setOnLessonLongClickListener(lessonLongClickListener);
 
-        if (currentWeek == null || currentWeek.getDays() == null || position >= currentWeek.getDays().size()) {
+        int weekNumber = weekOf(position);
+        int dayIndex = dayOf(position);
+        WeekSchedule ws = weekCache.get(weekNumber);
+
+        if (ws == null || ws.getDays() == null || dayIndex >= ws.getDays().size()) {
             dayAdapter.updateData(new ArrayList<>());
             dayAdapter.setNotes(new HashMap<>());
             dayAdapter.applyClock(null, null, null);
@@ -140,7 +198,7 @@ public class DayPagerAdapter extends RecyclerView.Adapter<DayPagerAdapter.PageVi
             return;
         }
 
-        DaySchedule day = currentWeek.getDays().get(position);
+        DaySchedule day = ws.getDays().get(dayIndex);
         LocalDate dayDate = day.getDate();
 
         if (dayDate != null) {
