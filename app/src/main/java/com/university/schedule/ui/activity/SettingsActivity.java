@@ -4,21 +4,33 @@ import android.Manifest;
 import android.app.DatePickerDialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
+import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
+import android.util.DisplayMetrics;
+import android.view.LayoutInflater;
 import android.view.View;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.graphics.ColorUtils;
 
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
+import com.google.android.material.checkbox.MaterialCheckBox;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.switchmaterial.SwitchMaterial;
+import com.google.android.material.textfield.TextInputEditText;
 import com.university.schedule.R;
 import com.university.schedule.data.ScheduleRepository;
 import com.university.schedule.logic.SemesterManager;
@@ -42,6 +54,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -59,6 +72,11 @@ public class SettingsActivity extends AppCompatActivity {
     private SwitchMaterial switchLessonReminder, switchMorningDigest, switchLiveLessonNotif, switchReducedTransparency;
     private MaterialButtonToggleGroup toggleReminderMinutes;
     private View cardExcludedSubjects;
+    private View cardGlassPreview;
+    private View previewTypePill;
+    private View previewLiveDot;
+    private TextView tvPreviewLiveBadge;
+    private TextView tvPreviewRoomPill;
     private AmbientBackdropView ambientBackdrop;
     private TextView tvExcludedSubjectsSummary;
     private MaterialButton btnSelectExcludedSubjects;
@@ -99,6 +117,11 @@ public class SettingsActivity extends AppCompatActivity {
         switchReducedTransparency = findViewById(R.id.switchReducedTransparency);
 
         cardExcludedSubjects = findViewById(R.id.cardExcludedSubjects);
+        cardGlassPreview = findViewById(R.id.cardGlassPreview);
+        previewTypePill = findViewById(R.id.previewTypePill);
+        previewLiveDot = findViewById(R.id.previewLiveDot);
+        tvPreviewLiveBadge = findViewById(R.id.tvPreviewLiveBadge);
+        tvPreviewRoomPill = findViewById(R.id.tvPreviewRoomPill);
         tvExcludedSubjectsSummary = findViewById(R.id.tvExcludedSubjectsSummary);
         btnSelectExcludedSubjects = findViewById(R.id.btnSelectExcludedSubjects);
 
@@ -116,21 +139,7 @@ public class SettingsActivity extends AppCompatActivity {
         findViewById(R.id.btnChangeSemester).setOnClickListener(v -> pickDate());
         btnRefresh.setOnClickListener(v -> doRefresh());
 
-        findViewById(R.id.btnClearData).setOnClickListener(v -> new MaterialAlertDialogBuilder(this)
-                .setTitle("Очистить данные")
-                .setMessage("Удалить расписание и настройки?")
-                .setPositiveButton("Удалить", (d, w) -> ex.execute(() -> {
-                    repo.clearAllData();
-                    runOnUiThread(() -> {
-                        Toast.makeText(this, "Данные очищены", Toast.LENGTH_SHORT).show();
-                        Intent i = new Intent(this, SelectionActivity.class);
-                        i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                        startActivity(i);
-                        finish();
-                    });
-                }))
-                .setNegativeButton("Отмена", null)
-                .show());
+        findViewById(R.id.btnClearData).setOnClickListener(v -> showClearDataDialog());
 
         setupThemeToggle();
         setupGlassSettings();
@@ -141,6 +150,11 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void applyGlassCards() {
+        if (cardGlassPreview != null) {
+            GlassSurfaceHelper.applyLessonStateGlass(cardGlassPreview, 22f, 1);
+        }
+        stylePreviewPills();
+
         int[] cardIds = {
                 R.id.cardSelection,
                 R.id.cardTools,
@@ -159,6 +173,34 @@ public class SettingsActivity extends AppCompatActivity {
         }
     }
 
+    private void stylePreviewPills() {
+        float density = getResources().getDisplayMetrics().density;
+        int emerald = 0xFF10B981;
+
+        if (previewTypePill != null) {
+            GradientDrawable pill = new GradientDrawable();
+            pill.setColor(0xFF34D399);
+            pill.setCornerRadius(2f * density);
+            previewTypePill.setBackground(pill);
+        }
+        if (previewLiveDot != null) {
+            previewLiveDot.setBackgroundTintList(ColorStateList.valueOf(emerald));
+        }
+        if (tvPreviewLiveBadge != null) {
+            GradientDrawable badge = new GradientDrawable();
+            badge.setColor(emerald);
+            badge.setCornerRadius(100f * density);
+            tvPreviewLiveBadge.setBackground(badge);
+        }
+        if (tvPreviewRoomPill != null) {
+            GradientDrawable roomBg = new GradientDrawable();
+            roomBg.setColor(ContextCompat.getColor(this, R.color.glass_capsule));
+            roomBg.setStroke(Math.max(1, Math.round(density)), ContextCompat.getColor(this, R.color.glass_stroke_start));
+            roomBg.setCornerRadius(12f * density);
+            tvPreviewRoomPill.setBackground(roomBg);
+        }
+    }
+
     private void setupGlassSettings() {
         suppressGlassCallback = true;
         switchReducedTransparency.setChecked(prefs.isReducedTransparency());
@@ -169,7 +211,7 @@ public class SettingsActivity extends AppCompatActivity {
             prefs.setReducedTransparency(isChecked);
             applyGlassCards();
             if (ambientBackdrop != null) {
-                ambientBackdrop.invalidate();
+                ambientBackdrop.reloadPreferences();
             }
         });
     }
@@ -248,6 +290,10 @@ public class SettingsActivity extends AppCompatActivity {
             else if (checkedButtonId == R.id.btnThemeDark) mode = ThemeManager.MODE_DARK;
             else mode = ThemeManager.MODE_SYSTEM;
             ThemeManager.setMode(this, mode);
+            if (ambientBackdrop != null) {
+                ambientBackdrop.reloadPreferences();
+            }
+            applyGlassCards();
         });
     }
 
@@ -330,6 +376,86 @@ public class SettingsActivity extends AppCompatActivity {
         }
     }
 
+    private void showClearDataDialog() {
+        float density = getResources().getDisplayMetrics().density;
+        int pad = Math.round(20f * density);
+
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(pad, pad, pad, pad);
+
+        TextView tvTitle = new TextView(this);
+        tvTitle.setText("Очистить данные");
+        tvTitle.setTextColor(ContextCompat.getColor(this, R.color.glass_text_primary));
+        tvTitle.setTextSize(18f);
+        tvTitle.setTypeface(tvTitle.getTypeface(), android.graphics.Typeface.BOLD);
+        root.addView(tvTitle);
+
+        TextView tvMessage = new TextView(this);
+        tvMessage.setText("Удалить расписание и настройки?");
+        tvMessage.setTextColor(ContextCompat.getColor(this, R.color.glass_text_secondary));
+        tvMessage.setTextSize(14f);
+        LinearLayout.LayoutParams msgLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        msgLp.topMargin = Math.round(8f * density);
+        root.addView(tvMessage, msgLp);
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams actionsLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        actionsLp.topMargin = Math.round(18f * density);
+        root.addView(actions, actionsLp);
+
+        MaterialButton btnCancel = new MaterialButton(
+                this,
+                null,
+                com.google.android.material.R.attr.materialButtonOutlinedStyle
+        );
+        btnCancel.setText("Отмена");
+        btnCancel.setCornerRadius(Math.round(23f * density));
+        btnCancel.setTextColor(ContextCompat.getColor(this, R.color.glass_text_primary));
+        btnCancel.setStrokeColor(ColorStateList.valueOf(ContextCompat.getColor(this, R.color.glass_stroke_start)));
+        btnCancel.setBackgroundTintList(ColorStateList.valueOf(ContextCompat.getColor(this, R.color.glass_capsule)));
+        LinearLayout.LayoutParams cancelLp = new LinearLayout.LayoutParams(0, Math.round(46f * density), 1f);
+        cancelLp.setMarginEnd(Math.round(8f * density));
+        actions.addView(btnCancel, cancelLp);
+
+        MaterialButton btnDelete = new MaterialButton(this);
+        btnDelete.setText("Удалить");
+        btnDelete.setCornerRadius(Math.round(23f * density));
+        btnDelete.setTextColor(Color.WHITE);
+        btnDelete.setBackgroundTintList(ColorStateList.valueOf(ContextCompat.getColor(this, R.color.glass_danger)));
+        LinearLayout.LayoutParams deleteLp = new LinearLayout.LayoutParams(0, Math.round(46f * density), 1f);
+        actions.addView(btnDelete, deleteLp);
+
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setView(root)
+                .create();
+
+        btnCancel.setOnClickListener(v -> dialog.dismiss());
+        btnDelete.setOnClickListener(v -> {
+            dialog.dismiss();
+            ex.execute(() -> {
+                repo.clearAllData();
+                runOnUiThread(() -> {
+                    Toast.makeText(this, "Данные очищены", Toast.LENGTH_SHORT).show();
+                    Intent i = new Intent(this, SelectionActivity.class);
+                    i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                    startActivity(i);
+                    finish();
+                });
+            });
+        });
+
+        dialog.show();
+        GlassSurfaceHelper.applyGlassDialog(dialog, root);
+    }
+
     private void showExcludedSubjectsDialog(String groupName) {
         ex.execute(() -> {
             List<String> subjects = repo.getDistinctSubjectsForGroup(groupName);
@@ -338,34 +464,133 @@ public class SettingsActivity extends AppCompatActivity {
                     Toast.makeText(this, "Предметы группы не найдены. Обновите расписание.", Toast.LENGTH_SHORT).show();
                     return;
                 }
-                CharSequence[] items = subjects.toArray(new CharSequence[0]);
-                Set<String> currentExcluded = excludedManager.getExcludedSubjects(groupName);
-                boolean[] checked = new boolean[items.length];
-                for (int i = 0; i < items.length; i++) {
-                    checked[i] = currentExcluded.contains(items[i].toString());
+
+                View view = LayoutInflater.from(this).inflate(R.layout.dialog_excluded_subjects, null);
+                View btnClose = view.findViewById(R.id.btnCloseExcludedDialog);
+                TextInputEditText etSearch = view.findViewById(R.id.etSearchExcludedSubjects);
+                TextView tvCount = view.findViewById(R.id.tvExcludedDialogCount);
+                LinearLayout llList = view.findViewById(R.id.llExcludedSubjectsList);
+                TextView tvEmpty = view.findViewById(R.id.tvExcludedEmptySearch);
+                MaterialButton btnCancel = view.findViewById(R.id.btnCancelExcludedSubjects);
+                MaterialButton btnSave = view.findViewById(R.id.btnSaveExcludedSubjects);
+
+                Set<String> selectedSet = new HashSet<>(excludedManager.getExcludedSubjects(groupName));
+                updateExcludedDialogCount(tvCount, selectedSet.size(), subjects.size());
+                renderExcludedSubjectCheckboxes(llList, tvEmpty, tvCount, subjects, selectedSet, "");
+
+                if (etSearch != null) {
+                    etSearch.addTextChangedListener(new TextWatcher() {
+                        @Override
+                        public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
+
+                        @Override
+                        public void onTextChanged(CharSequence s, int start, int before, int count) {
+                            String query = s != null ? s.toString() : "";
+                            renderExcludedSubjectCheckboxes(llList, tvEmpty, tvCount, subjects, selectedSet, query);
+                        }
+
+                        @Override
+                        public void afterTextChanged(Editable s) { }
+                    });
                 }
 
-                new MaterialAlertDialogBuilder(this)
-                        .setTitle("Вычеркнуть предметы (перезачёт)")
-                        .setMultiChoiceItems(items, checked, (dialog, which, isChecked) -> {
-                            checked[which] = isChecked;
-                        })
-                        .setPositiveButton("Сохранить", (dialog, which) -> {
-                            Set<String> newSet = new HashSet<>();
-                            for (int i = 0; i < checked.length; i++) {
-                                if (checked[i]) {
-                                    newSet.add(items[i].toString());
-                                }
-                            }
-                            excludedManager.setExcludedSubjects(groupName, newSet);
-                            updateExcludedSummary(groupName);
-                            ReminderScheduler.rescheduleAll(this);
-                            Toast.makeText(this, "Настройки перезачёта сохранены", Toast.LENGTH_SHORT).show();
-                        })
-                        .setNegativeButton("Отмена", null)
-                        .show();
+                AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                        .setView(view)
+                        .create();
+
+                if (btnClose != null) {
+                    btnClose.setOnClickListener(v -> dialog.dismiss());
+                }
+                if (btnCancel != null) {
+                    btnCancel.setOnClickListener(v -> dialog.dismiss());
+                }
+                if (btnSave != null) {
+                    btnSave.setOnClickListener(v -> {
+                        excludedManager.setExcludedSubjects(groupName, selectedSet);
+                        updateExcludedSummary(groupName);
+                        ReminderScheduler.rescheduleAll(this);
+                        Toast.makeText(this, "Настройки перезачёта сохранены", Toast.LENGTH_SHORT).show();
+                        dialog.dismiss();
+                    });
+                }
+
+                dialog.show();
+                GlassSurfaceHelper.applyGlassDialog(dialog, view);
+
+                if (dialog.getWindow() != null) {
+                    DisplayMetrics dm = getResources().getDisplayMetrics();
+                    int w = (int) (dm.widthPixels * 0.92f);
+                    int h = (int) (dm.heightPixels * 0.78f);
+                    dialog.getWindow().setLayout(w, h);
+                }
             });
         });
+    }
+
+    private void renderExcludedSubjectCheckboxes(
+            LinearLayout container,
+            TextView tvEmpty,
+            TextView tvCount,
+            List<String> allSubjects,
+            Set<String> selectedSet,
+            String rawQuery) {
+        container.removeAllViews();
+        String query = rawQuery != null ? rawQuery.trim().toLowerCase(Locale.ROOT) : "";
+        int accent = ContextCompat.getColor(this, R.color.glass_accent);
+        int textPrimary = ContextCompat.getColor(this, R.color.glass_text_primary);
+        int strokeColor = ContextCompat.getColor(this, R.color.glass_stroke_mid);
+        ColorStateList tint = new ColorStateList(
+                new int[][]{
+                        new int[]{android.R.attr.state_checked},
+                        new int[]{}
+                },
+                new int[]{accent, ContextCompat.getColor(this, R.color.glass_text_secondary)}
+        );
+
+        int shown = 0;
+        float density = getResources().getDisplayMetrics().density;
+        for (String subject : allSubjects) {
+            if (!query.isEmpty() && !subject.toLowerCase(Locale.ROOT).contains(query)) {
+                continue;
+            }
+            shown++;
+            MaterialCheckBox cb = new MaterialCheckBox(this);
+            cb.setText(subject);
+            cb.setTextColor(textPrimary);
+            cb.setTextSize(14f);
+            cb.setButtonTintList(tint);
+            cb.setPadding(Math.round(6f * density), Math.round(10f * density),
+                    Math.round(6f * density), Math.round(10f * density));
+            cb.setChecked(selectedSet.contains(subject));
+            cb.setOnCheckedChangeListener((buttonView, isChecked) -> {
+                if (isChecked) {
+                    selectedSet.add(subject);
+                } else {
+                    selectedSet.remove(subject);
+                }
+                updateExcludedDialogCount(tvCount, selectedSet.size(), allSubjects.size());
+            });
+            container.addView(cb, new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+            ));
+
+            View divider = new View(this);
+            divider.setBackgroundColor(ColorUtils.setAlphaComponent(strokeColor, 64));
+            container.addView(divider, new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    Math.max(1, Math.round(0.75f * density))
+            ));
+        }
+
+        if (tvEmpty != null) {
+            tvEmpty.setVisibility(shown == 0 ? View.VISIBLE : View.GONE);
+        }
+    }
+
+    private void updateExcludedDialogCount(TextView tvCount, int selectedCount, int totalCount) {
+        if (tvCount == null) return;
+        tvCount.setText("Выбрано: " + selectedCount + " из " + totalCount);
     }
 
     @Override

@@ -1,29 +1,24 @@
 package com.university.schedule.ui.activity;
 
 import android.Manifest;
-import android.app.Dialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
+import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.util.SparseArray;
-import android.view.LayoutInflater;
+import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
-import android.widget.CheckBox;
-import android.widget.EditText;
 import android.widget.HorizontalScrollView;
-import android.widget.ImageButton;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -33,21 +28,19 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.PopupMenu;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import androidx.viewpager2.widget.ViewPager2;
 
-import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.tabs.TabLayout;
 import com.university.schedule.R;
 import com.university.schedule.data.ScheduleRepository;
+import com.university.schedule.data.db.NoteDao;
 import com.university.schedule.logic.WeekCalculator;
 import com.university.schedule.model.DaySchedule;
 import com.university.schedule.model.GroupOrTeacher;
@@ -58,8 +51,13 @@ import com.university.schedule.model.WeekSchedule;
 import com.university.schedule.notification.LiveLessonService;
 import com.university.schedule.notification.ReminderScheduler;
 import com.university.schedule.ui.adapter.DayPagerAdapter;
+import com.university.schedule.ui.controller.WeekScheduleController;
 import com.university.schedule.ui.dialog.AttendanceDialog;
 import com.university.schedule.ui.dialog.BellScheduleDialog;
+import com.university.schedule.ui.dialog.BuildingInfoDialog;
+import com.university.schedule.ui.dialog.HomeworkHubDialog;
+import com.university.schedule.ui.dialog.LessonNoteDialog;
+import com.university.schedule.ui.dialog.MarkAttendanceDialog;
 import com.university.schedule.ui.dialog.RoomTeacherFinderDialog;
 import com.university.schedule.ui.dialog.ScheduleDiffDialog;
 import com.university.schedule.ui.glass.AmbientBackdropView;
@@ -68,6 +66,7 @@ import com.university.schedule.util.AppError;
 import com.university.schedule.util.AttendanceManager;
 import com.university.schedule.util.Constants;
 import com.university.schedule.util.DateUtils;
+import com.university.schedule.util.EdgeToEdgeCompat;
 import com.university.schedule.util.ExcludedSubjectsManager;
 import com.university.schedule.util.FavoritesManager;
 import com.university.schedule.util.PrefsManager;
@@ -81,34 +80,31 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
 
-    private interface PhotoPickCallback {
-        void onPhotoReady(String path);
-    }
-
-    private PhotoPickCallback activePhotoCallback;
+    private LessonNoteDialog.PhotoCallback activePhotoCallback;
     private ActivityResultLauncher<String> pickPhotoLauncher;
     private ActivityResultLauncher<String> requestPermissionLauncher;
 
     private ExcludedSubjectsManager excludedSubjectsManager;
     private SkippedLessonsManager skippedLessonsManager;
     private AttendanceManager attendanceManager;
+    private NoteDao noteDao;
 
     private AmbientBackdropView ambientBackdrop;
     private View headerContainer;
     private View toolbarTitleArea;
     private View weekSwitcherCard;
-    private View btnSettings;
-    private View btnMenu;
+    private View bottomDock;
+    private View dockPairs;
+    private View dockAttendance;
+    private View dockRooms;
+    private View dockMore;
+    private TextView tvDockMoreBadge;
     private View btnPrev, btnNext;
     private View staleBanner;
     private TabLayout tabLayout;
@@ -122,9 +118,7 @@ public class MainActivity extends AppCompatActivity {
     private DayPagerAdapter pagerAdapter;
     private ScheduleRepository repo;
     private WeekCalculator calc;
-    private final SparseArray<WeekSchedule> weekCache = new SparseArray<>();
-    private final Set<Integer> loadingWeeks = new HashSet<>();
-    private int selectionGeneration = 0;
+    private WeekScheduleController weekController;
     private WeekSchedule currentWeek;
     private String selType, selName;
     private int weekNum, dayIndex;
@@ -144,11 +138,13 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle s) {
         super.onCreate(s);
-        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        EdgeToEdgeCompat.enableEdgeToEdge(this);
         setContentView(R.layout.activity_main);
 
         repo = ScheduleRepository.getInstance(this);
         calc = repo.getWeekCalculator();
+        weekController = new WeekScheduleController(repo, ex);
+        noteDao = new NoteDao(this);
         selType = repo.getSelectionType();
         selName = repo.getSelectionName();
         initWeekForDate(DateUtils.todayMoscow());
@@ -157,8 +153,12 @@ public class MainActivity extends AppCompatActivity {
         headerContainer = findViewById(R.id.headerContainer);
         toolbarTitleArea = findViewById(R.id.toolbarTitleArea);
         weekSwitcherCard = findViewById(R.id.weekSwitcherCard);
-        btnSettings = findViewById(R.id.btnSettings);
-        btnMenu = findViewById(R.id.btnMenu);
+        bottomDock = findViewById(R.id.bottomDock);
+        dockPairs = findViewById(R.id.dockPairs);
+        dockAttendance = findViewById(R.id.dockAttendance);
+        dockRooms = findViewById(R.id.dockRooms);
+        dockMore = findViewById(R.id.dockMore);
+        tvDockMoreBadge = findViewById(R.id.tvDockMoreBadge);
         btnPrev = findViewById(R.id.btnPrevWeek);
         btnNext = findViewById(R.id.btnNextWeek);
         staleBanner = findViewById(R.id.staleBanner);
@@ -186,21 +186,9 @@ public class MainActivity extends AppCompatActivity {
         tvSelectionName.setText(selName != null ? selName : "—");
         tvSelectionType.setText(GroupOrTeacher.TYPE_GROUP.equals(selType) ? "Группа" : "Преподаватель");
         tvTodayDate.setText(DateUtils.formatDisplayDateShort(DateUtils.todayMoscow()));
-        tvTodayDate.setOnClickListener(v -> {
-            initWeekForDate(DateUtils.todayMoscow());
-            currentWeek = weekCache.get(weekNum);
-            updateWeekHeaderUi();
-            updateDayTabsForWeek();
-            selectPage(weekNum, dayIndex, true);
-            loadWeek();
-        });
+        tvTodayDate.setOnClickListener(v -> jumpToToday());
 
-        if (btnSettings != null) {
-            btnSettings.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
-        }
-        if (btnMenu != null) {
-            btnMenu.setOnClickListener(this::showOverflowMenu);
-        }
+        setupBottomDock();
 
         toolbarTitleArea.setOnClickListener(v -> showSelectionDialog());
 
@@ -250,6 +238,10 @@ public class MainActivity extends AppCompatActivity {
         pagerAdapter.setAttendanceManager(attendanceManager);
         pagerAdapter.setOnLessonClickListener(this::showLessonNoteDialog);
         pagerAdapter.setOnLessonLongClickListener(this::showSkipLessonDialog);
+        pagerAdapter.setOnTeacherClickListener(teacherName ->
+                RoomTeacherFinderDialog.showForTeacher(this, teacherName));
+        pagerAdapter.setOnRoomClickListener(rawRoom ->
+                BuildingInfoDialog.show(this, rawRoom));
 
         viewPager.setAdapter(pagerAdapter);
         viewPager.setOffscreenPageLimit(2);
@@ -277,6 +269,7 @@ public class MainActivity extends AppCompatActivity {
         viewPager.registerOnPageChangeCallback(new ViewPager2.OnPageChangeCallback() {
             @Override
             public void onPageSelected(int position) {
+                viewPager.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
                 int newWeek = DayPagerAdapter.weekOf(position);
                 int newDay = DayPagerAdapter.dayOf(position);
                 dayIndex = newDay;
@@ -292,7 +285,7 @@ public class MainActivity extends AppCompatActivity {
 
                 if (newWeek != weekNum) {
                     weekNum = newWeek;
-                    currentWeek = weekCache.get(weekNum);
+                    currentWeek = weekController.getCachedWeek(weekNum);
                     updateWeekHeaderUi();
                     updateDayTabsForWeek();
                     loadWeek();
@@ -317,7 +310,7 @@ public class MainActivity extends AppCompatActivity {
             if (weekNum > 1) {
                 weekNum--;
                 dayIndex = 0;
-                currentWeek = weekCache.get(weekNum);
+                currentWeek = weekController.getCachedWeek(weekNum);
                 updateWeekHeaderUi();
                 updateDayTabsForWeek();
                 selectPage(weekNum, 0, true);
@@ -328,7 +321,7 @@ public class MainActivity extends AppCompatActivity {
             if (weekNum < DayPagerAdapter.WEEK_COUNT) {
                 weekNum++;
                 dayIndex = 0;
-                currentWeek = weekCache.get(weekNum);
+                currentWeek = weekController.getCachedWeek(weekNum);
                 updateWeekHeaderUi();
                 updateDayTabsForWeek();
                 selectPage(weekNum, 0, true);
@@ -356,26 +349,214 @@ public class MainActivity extends AppCompatActivity {
                     baseBottom
             );
             if (pagerAdapter != null) {
-                pagerAdapter.setBottomInsetPx(bars.bottom);
+                pagerAdapter.setBottomInsetPx(bars.bottom + dpToPx(88));
             }
             return insets;
         });
+
+        if (bottomDock != null) {
+            EdgeToEdgeCompat.applyBottomSystemBarMargin(bottomDock);
+        }
     }
 
     private void applyGlassChrome() {
         GlassSurfaceHelper.applyGlassCard(toolbarTitleArea, 18f, false);
         GlassSurfaceHelper.applyGlassCard(tvTodayDate, 999f, false);
-        GlassSurfaceHelper.applyGlassCard(btnSettings, 999f, false);
-        GlassSurfaceHelper.applyGlassCard(btnMenu, 999f, false);
         GlassSurfaceHelper.applyGlassCard(weekSwitcherCard, 20f, false);
         GlassSurfaceHelper.applyGlassCard(staleBanner, 16f, true);
+        GlassSurfaceHelper.applyGlassCard(bottomDock, 999f, false);
+        GlassSurfaceHelper.applyGlassCard(dockPairs, 999f, true);
     }
 
-    private void showOverflowMenu(View anchor) {
-        PopupMenu popup = new PopupMenu(this, anchor);
-        popup.getMenuInflater().inflate(R.menu.menu_main, popup.getMenu());
-        popup.setOnMenuItemClickListener(item -> handleMenuAction(item.getItemId()));
-        popup.show();
+    private void setupBottomDock() {
+        if (dockPairs != null) {
+            dockPairs.setOnClickListener(v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+                jumpToToday();
+            });
+        }
+        if (dockAttendance != null) {
+            dockAttendance.setOnClickListener(v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                openAttendanceDialog();
+            });
+        }
+        if (dockRooms != null) {
+            dockRooms.setOnClickListener(v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                RoomTeacherFinderDialog.show(this);
+            });
+        }
+        if (dockMore != null) {
+            dockMore.setOnClickListener(v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                showMoreMenuDialog();
+            });
+        }
+        updateDockMoreBadge();
+    }
+
+    private void jumpToToday() {
+        initWeekForDate(DateUtils.todayMoscow());
+        currentWeek = weekController.getCachedWeek(weekNum);
+        updateWeekHeaderUi();
+        updateDayTabsForWeek();
+        selectPage(weekNum, dayIndex, true);
+        loadWeek();
+        updateClock();
+    }
+
+    private void openAttendanceDialog() {
+        AttendanceDialog.show(this, selName, () -> {
+            if (attendanceManager != null) {
+                attendanceManager.invalidateCache();
+                pagerAdapter.notifyDataSetChanged();
+            }
+            LiveLessonService.syncNow(this);
+        });
+    }
+
+    private void updateDockMoreBadge() {
+        if (tvDockMoreBadge == null || noteDao == null) return;
+        int count = noteDao.getPendingNotesCount();
+        if (count > 0) {
+            tvDockMoreBadge.setText(count > 99 ? "99+" : String.valueOf(count));
+            GradientDrawable badgeBg = new GradientDrawable();
+            badgeBg.setShape(GradientDrawable.RECTANGLE);
+            badgeBg.setCornerRadius(dpToPx(999));
+            badgeBg.setColor(ContextCompat.getColor(this, R.color.glass_accent));
+            tvDockMoreBadge.setBackground(badgeBg);
+            tvDockMoreBadge.setVisibility(View.VISIBLE);
+        } else {
+            tvDockMoreBadge.setVisibility(View.GONE);
+        }
+    }
+
+    private void showMoreMenuDialog() {
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        int padH = dpToPx(18);
+        root.setPadding(padH, dpToPx(18), padH, dpToPx(18));
+
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView tvTitle = new TextView(this);
+        tvTitle.setText("Ещё");
+        tvTitle.setTextSize(18);
+        tvTitle.setTypeface(null, Typeface.BOLD);
+        tvTitle.setTextColor(ContextCompat.getColor(this, R.color.glass_text_primary));
+        LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        tvTitle.setLayoutParams(titleLp);
+        header.addView(tvTitle);
+
+        TextView btnClose = new TextView(this);
+        btnClose.setText("✕");
+        btnClose.setTextSize(15);
+        btnClose.setTypeface(null, Typeface.BOLD);
+        btnClose.setGravity(Gravity.CENTER);
+        btnClose.setTextColor(ContextCompat.getColor(this, R.color.glass_text_secondary));
+        btnClose.setPadding(dpToPx(10), dpToPx(6), dpToPx(10), dpToPx(6));
+        GlassSurfaceHelper.applyGlassCard(btnClose, 999f, false);
+        header.addView(btnClose);
+        root.addView(header);
+
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setView(root)
+                .create();
+
+        btnClose.setOnClickListener(v -> dialog.dismiss());
+
+        int pendingCount = (noteDao != null) ? noteDao.getPendingNotesCount() : 0;
+        addMoreMenuItem(root, "📝", "Домашки и заметки", pendingCount > 0 ? String.valueOf(pendingCount) : null, () -> {
+            dialog.dismiss();
+            HomeworkHubDialog.show(this, () -> {
+                clearWeekCache();
+                loadWeek();
+                updateDockMoreBadge();
+            });
+        });
+        addMoreMenuItem(root, "🔔", "Расписание звонков", null, () -> {
+            dialog.dismiss();
+            BellScheduleDialog.show(this);
+        });
+        addMoreMenuItem(root, "🔄", "Что изменилось", null, () -> {
+            dialog.dismiss();
+            ScheduleDiffDialog.show(this);
+        });
+        addMoreMenuItem(root, "↻", "Обновить расписание", null, () -> {
+            dialog.dismiss();
+            swipeRefresh.setRefreshing(true);
+            refresh();
+        });
+        addMoreMenuItem(root, "⚙", getString(R.string.action_settings), null, () -> {
+            dialog.dismiss();
+            startActivity(new Intent(this, SettingsActivity.class));
+        });
+
+        dialog.show();
+        GlassSurfaceHelper.applyGlassDialog(dialog, root);
+        Window window = dialog.getWindow();
+        if (window != null) {
+            window.setGravity(Gravity.BOTTOM);
+            WindowInsetsCompat rootInsets = ViewCompat.getRootWindowInsets(getWindow().getDecorView());
+            int navBottom = rootInsets != null ? rootInsets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom : 0;
+            window.getAttributes().y = navBottom + dpToPx(16);
+            int width = (int) (getResources().getDisplayMetrics().widthPixels * 0.94);
+            window.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
+    }
+
+    private void addMoreMenuItem(LinearLayout parent, String icon, String title, String badgeText, Runnable onClick) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dpToPx(14), dpToPx(12), dpToPx(14), dpToPx(12));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        lp.topMargin = dpToPx(10);
+        row.setLayoutParams(lp);
+        GlassSurfaceHelper.applyGlassCard(row, 16f, false);
+
+        TextView tvIcon = new TextView(this);
+        tvIcon.setText(icon);
+        tvIcon.setTextSize(16);
+        tvIcon.setTextColor(ContextCompat.getColor(this, R.color.glass_text_primary));
+        row.addView(tvIcon);
+
+        TextView tvTitle = new TextView(this);
+        tvTitle.setText(title);
+        tvTitle.setTextSize(14);
+        tvTitle.setTypeface(null, Typeface.BOLD);
+        tvTitle.setTextColor(ContextCompat.getColor(this, R.color.glass_text_primary));
+        LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        titleLp.setMarginStart(dpToPx(12));
+        tvTitle.setLayoutParams(titleLp);
+        row.addView(tvTitle);
+
+        if (badgeText != null && !badgeText.isEmpty()) {
+            TextView tvBadge = new TextView(this);
+            tvBadge.setText(badgeText);
+            tvBadge.setTextSize(11);
+            tvBadge.setTypeface(null, Typeface.BOLD);
+            tvBadge.setTextColor(Color.WHITE);
+            tvBadge.setPadding(dpToPx(8), dpToPx(2), dpToPx(8), dpToPx(2));
+            GradientDrawable badgeBg = new GradientDrawable();
+            badgeBg.setShape(GradientDrawable.RECTANGLE);
+            badgeBg.setCornerRadius(dpToPx(999));
+            badgeBg.setColor(ContextCompat.getColor(this, R.color.glass_accent));
+            tvBadge.setBackground(badgeBg);
+            row.addView(tvBadge);
+        }
+
+        row.setOnClickListener(v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+            onClick.run();
+        });
+        parent.addView(row);
     }
 
     private void showSelectionDialog() {
@@ -385,36 +566,144 @@ public class MainActivity extends AppCompatActivity {
                 ? "Текущая группа: " + (selName != null ? selName : "—") + "\nХотите выбрать другую группу?"
                 : "Текущий преподаватель: " + (selName != null ? selName : "—") + "\nХотите выбрать другого преподавателя?";
 
-        new MaterialAlertDialogBuilder(this)
-                .setTitle(title)
-                .setMessage(message)
-                .setPositiveButton("Выбрать", (dialog, which) -> {
-                    Intent i = new Intent(this, SelectionActivity.class);
-                    i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                    startActivity(i);
-                    finish();
-                })
-                .setNegativeButton("Отмена", null)
-                .show();
+        LinearLayout root = createGlassMessageDialogRoot(title, message);
+        LinearLayout actions = createGlassDialogActionsRow();
+
+        TextView btnCancel = createGlassDialogButton("Отмена", R.color.glass_text_secondary, false);
+        TextView btnSelect = createGlassDialogButton("Выбрать", R.color.glass_accent, true);
+        LinearLayout.LayoutParams selLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        selLp.setMarginStart(dpToPx(10));
+        btnSelect.setLayoutParams(selLp);
+
+        actions.addView(btnCancel);
+        actions.addView(btnSelect);
+        root.addView(actions);
+
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setView(root)
+                .create();
+
+        btnCancel.setOnClickListener(v -> dialog.dismiss());
+        btnSelect.setOnClickListener(v -> {
+            dialog.dismiss();
+            Intent i = new Intent(this, SelectionActivity.class);
+            i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(i);
+            finish();
+        });
+
+        dialog.show();
+        GlassSurfaceHelper.applyGlassDialog(dialog, root);
+        Window window = dialog.getWindow();
+        if (window != null) {
+            int width = (int) (getResources().getDisplayMetrics().widthPixels * 0.88);
+            window.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
     }
 
     private void showWelcomePermissionsDialog(PrefsManager prefs) {
-        new MaterialAlertDialogBuilder(this)
-                .setTitle("Добро пожаловать в РГАТУ!")
-                .setMessage("Для работы напоминаний о парах приложению требуется доступ к уведомлениям:\n\n"
-                        + "• 🔔 Напоминание за 10–15 мин до звонка (с кабинетом и предметом)\n"
-                        + "• 🌅 Утреннее расписание в 07:30\n"
-                        + "• ⚠️ Оповещения об отменах и переносах пар\n\n"
-                        + "Разрешить отправку уведомлений?")
-                .setPositiveButton("Разрешить", (dialog, which) -> {
-                    prefs.setFirstLaunchCompleted(true);
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS);
-                    }
-                })
-                .setNegativeButton("Позже", (dialog, which) -> prefs.setFirstLaunchCompleted(true))
+        String title = "Добро пожаловать в РГАТУ!";
+        String message = "Для работы напоминаний о парах приложению требуется доступ к уведомлениям:\n\n"
+                + "• 🔔 Напоминание за 10–15 мин до звонка (с кабинетом и предметом)\n"
+                + "• 🌅 Утреннее расписание в 07:30\n"
+                + "• ⚠️ Оповещения об отменах и переносах пар\n\n"
+                + "Разрешить отправку уведомлений?";
+
+        LinearLayout root = createGlassMessageDialogRoot(title, message);
+        LinearLayout actions = createGlassDialogActionsRow();
+
+        TextView btnLater = createGlassDialogButton("Позже", R.color.glass_text_secondary, false);
+        TextView btnAllow = createGlassDialogButton("Разрешить", R.color.glass_accent, true);
+        LinearLayout.LayoutParams allowLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        allowLp.setMarginStart(dpToPx(10));
+        btnAllow.setLayoutParams(allowLp);
+
+        actions.addView(btnLater);
+        actions.addView(btnAllow);
+        root.addView(actions);
+
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setView(root)
                 .setCancelable(false)
-                .show();
+                .create();
+
+        btnLater.setOnClickListener(v -> {
+            prefs.setFirstLaunchCompleted(true);
+            dialog.dismiss();
+        });
+        btnAllow.setOnClickListener(v -> {
+            prefs.setFirstLaunchCompleted(true);
+            dialog.dismiss();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS);
+            }
+        });
+
+        dialog.show();
+        GlassSurfaceHelper.applyGlassDialog(dialog, root);
+        Window window = dialog.getWindow();
+        if (window != null) {
+            int width = (int) (getResources().getDisplayMetrics().widthPixels * 0.90);
+            window.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
+    }
+
+    private LinearLayout createGlassMessageDialogRoot(String title, String message) {
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        int pad = dpToPx(22);
+        root.setPadding(pad, pad, pad, dpToPx(16));
+
+        TextView tvTitle = new TextView(this);
+        tvTitle.setText(title);
+        tvTitle.setTextSize(18);
+        tvTitle.setTypeface(null, Typeface.BOLD);
+        tvTitle.setTextColor(ContextCompat.getColor(this, R.color.glass_text_primary));
+        root.addView(tvTitle);
+
+        TextView tvMsg = new TextView(this);
+        tvMsg.setText(message);
+        tvMsg.setTextSize(14);
+        tvMsg.setLineSpacing(0f, 1.15f);
+        tvMsg.setTextColor(ContextCompat.getColor(this, R.color.glass_text_secondary));
+        LinearLayout.LayoutParams msgLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        msgLp.topMargin = dpToPx(10);
+        tvMsg.setLayoutParams(msgLp);
+        root.addView(tvMsg);
+        return root;
+    }
+
+    private LinearLayout createGlassDialogActionsRow() {
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setGravity(Gravity.END);
+        LinearLayout.LayoutParams actLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        actLp.topMargin = dpToPx(20);
+        actions.setLayoutParams(actLp);
+        return actions;
+    }
+
+    private TextView createGlassDialogButton(String label, int colorRes, boolean highlight) {
+        TextView btn = new TextView(this);
+        btn.setText(label);
+        btn.setTextSize(14);
+        btn.setTypeface(null, Typeface.BOLD);
+        btn.setTextColor(ContextCompat.getColor(this, colorRes));
+        btn.setPadding(dpToPx(16), dpToPx(10), dpToPx(16), dpToPx(10));
+        GlassSurfaceHelper.applyGlassCard(btn, 999f, highlight);
+        return btn;
     }
 
     private void updateFavoritesBar() {
@@ -575,96 +864,22 @@ public class MainActivity extends AppCompatActivity {
 
     private void showLessonNoteDialog(ScheduleItem item, LocalDate date, LessonNote existingNote) {
         if (date == null) return;
-        View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_lesson_note, null);
-        TextView tvSubject = dialogView.findViewById(R.id.tvNoteDialogSubject);
-        TextView tvDetails = dialogView.findViewById(R.id.tvNoteDialogDetails);
-        EditText etNote = dialogView.findViewById(R.id.etNoteText);
-        CheckBox cbCompleted = dialogView.findViewById(R.id.cbNoteCompleted);
-        View cardNotePhoto = dialogView.findViewById(R.id.cardNotePhoto);
-        ImageView ivNotePhotoPreview = dialogView.findViewById(R.id.ivNotePhotoPreview);
-        View btnRemovePhoto = dialogView.findViewById(R.id.btnRemovePhoto);
-        MaterialButton btnAttachPhoto = dialogView.findViewById(R.id.btnAttachPhoto);
-        View btnDelete = dialogView.findViewById(R.id.btnDeleteNote);
-        View btnCancel = dialogView.findViewById(R.id.btnCancelNote);
-        View btnSave = dialogView.findViewById(R.id.btnSaveNote);
-
-        tvSubject.setText(item.getSubjectName());
-        String det = item.getLessonNumber() + " пара · " + DateUtils.formatDisplayDate(date);
-        if (item.getRoom() != null && !item.getRoom().isEmpty()) det += " · ауд. " + item.getRoom();
-        tvDetails.setText(det);
-
-        final String[] currentPhotoPath = new String[]{(existingNote != null) ? existingNote.getImagePath() : null};
-
-        Runnable updatePhotoUi = () -> {
-            if (currentPhotoPath[0] != null && new File(currentPhotoPath[0]).exists()) {
-                cardNotePhoto.setVisibility(View.VISIBLE);
-                displayImageThumb(ivNotePhotoPreview, currentPhotoPath[0]);
-                btnAttachPhoto.setText("Сменить фото");
-            } else {
-                cardNotePhoto.setVisibility(View.GONE);
-                btnAttachPhoto.setText("Прикрепить фото");
-            }
-        };
-
-        boolean hasContent = existingNote != null && ((existingNote.getNoteText() != null && !existingNote.getNoteText().isEmpty())
-                || (existingNote.getImagePath() != null && !existingNote.getImagePath().isEmpty()));
-        if (hasContent) {
-            if (existingNote.getNoteText() != null) etNote.setText(existingNote.getNoteText());
-            cbCompleted.setChecked(existingNote.isCompleted());
-            cbCompleted.setVisibility(View.VISIBLE);
-            btnDelete.setVisibility(View.VISIBLE);
-        } else {
-            cbCompleted.setVisibility(View.GONE);
-            btnDelete.setVisibility(View.GONE);
-        }
-
-        updatePhotoUi.run();
-
-        activePhotoCallback = path -> {
-            currentPhotoPath[0] = path;
-            updatePhotoUi.run();
-        };
-
-        btnAttachPhoto.setOnClickListener(v -> pickPhotoLauncher.launch("image/*"));
-        btnRemovePhoto.setOnClickListener(v -> {
-            currentPhotoPath[0] = null;
-            updatePhotoUi.run();
-        });
-        ivNotePhotoPreview.setOnClickListener(v -> {
-            if (currentPhotoPath[0] != null) showFullScreenPhoto(currentPhotoPath[0]);
-        });
-
-        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
-                .setView(dialogView)
-                .create();
-
-        dialog.setOnDismissListener(d -> activePhotoCallback = null);
-
-        btnCancel.setOnClickListener(v -> dialog.dismiss());
-
-        btnDelete.setOnClickListener(v -> {
-            String dateIso = date.toString();
-            repo.deleteNote(dateIso, item.getLessonNumber());
-            pagerAdapter.updateNotesForDate(dateIso, repo.getNotesForDate(dateIso));
-            dialog.dismiss();
-            Toast.makeText(this, "Заметка удалена", Toast.LENGTH_SHORT).show();
-        });
-
-        btnSave.setOnClickListener(v -> {
-            String text = etNote.getText().toString().trim();
-            String dateIso = date.toString();
-            if (text.isEmpty() && currentPhotoPath[0] == null) {
-                repo.deleteNote(dateIso, item.getLessonNumber());
-            } else {
-                repo.saveNote(dateIso, item.getLessonNumber(), item.getSubjectName(), text, currentPhotoPath[0], cbCompleted.isChecked());
-            }
-            pagerAdapter.updateNotesForDate(dateIso, repo.getNotesForDate(dateIso));
-            dialog.dismiss();
-            Toast.makeText(this, "Заметка сохранена", Toast.LENGTH_SHORT).show();
-        });
-
-        dialog.show();
-        GlassSurfaceHelper.applyGlassDialog(dialog, dialogView);
+        LessonNoteDialog.show(
+                this,
+                item,
+                date,
+                existingNote,
+                repo,
+                cb -> {
+                    activePhotoCallback = cb;
+                    pickPhotoLauncher.launch("image/*");
+                },
+                () -> {
+                    String dateIso = date.toString();
+                    pagerAdapter.updateNotesForDate(dateIso, repo.getNotesForDate(dateIso));
+                    updateDockMoreBadge();
+                }
+        );
     }
 
     private String savePickedImageToInternalStorage(Uri uri) {
@@ -687,141 +902,18 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private int calculateInSampleSize(BitmapFactory.Options options, int reqWidth, int reqHeight) {
-        final int height = options.outHeight;
-        final int width = options.outWidth;
-        int inSampleSize = 1;
-        if (height > reqHeight || width > reqWidth) {
-            final int halfHeight = height / 2;
-            final int halfWidth = width / 2;
-            while ((halfHeight / inSampleSize) >= reqHeight && (halfWidth / inSampleSize) >= reqWidth) {
-                inSampleSize *= 2;
-            }
-        }
-        return inSampleSize;
-    }
-
-    private void displayImageThumb(ImageView iv, String path) {
-        if (path == null || !new File(path).exists()) {
-            iv.setImageDrawable(null);
-            return;
-        }
-        try {
-            BitmapFactory.Options opts = new BitmapFactory.Options();
-            opts.inJustDecodeBounds = true;
-            BitmapFactory.decodeFile(path, opts);
-            opts.inSampleSize = calculateInSampleSize(opts, 480, 360);
-            opts.inJustDecodeBounds = false;
-            Bitmap bmp = BitmapFactory.decodeFile(path, opts);
-            iv.setImageBitmap(bmp);
-        } catch (Throwable t) {
-            iv.setImageDrawable(null);
-        }
-    }
-
-    private void showFullScreenPhoto(String path) {
-        if (path == null || !new File(path).exists()) return;
-        Dialog d = new Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
-        ImageView iv = new ImageView(this);
-        iv.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        try {
-            Bitmap bmp = BitmapFactory.decodeFile(path);
-            if (bmp != null) {
-                iv.setImageBitmap(bmp);
-            } else {
-                return;
-            }
-        } catch (Throwable t) {
-            return;
-        }
-        iv.setOnClickListener(v -> d.dismiss());
-        d.setContentView(iv);
-        d.show();
-    }
-
     private void showSkipLessonDialog(ScheduleItem item, LocalDate date) {
-        showAttendanceMarkDialog(item, date);
-    }
-
-    private void showAttendanceMarkDialog(ScheduleItem item, LocalDate date) {
         if (date == null || item == null) return;
-        View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_mark_lesson_attendance, null);
-
-        TextView tvSubject = dialogView.findViewById(R.id.tvMarkLessonSubject);
-        TextView tvDetails = dialogView.findViewById(R.id.tvMarkLessonDetails);
-        TextView tvDate = dialogView.findViewById(R.id.tvMarkLessonDate);
-        TextView tvStatus = dialogView.findViewById(R.id.tvCurrentStatusBadge);
-        ImageButton btnClose = dialogView.findViewById(R.id.btnCloseMarkDialog);
-        View cardAttended = dialogView.findViewById(R.id.cardMarkAttended);
-        TextView tvBtnAttendedTitle = dialogView.findViewById(R.id.tvBtnAttendedTitle);
-        View cardSkipped = dialogView.findViewById(R.id.cardMarkSkipped);
-        MaterialButton btnReset = dialogView.findViewById(R.id.btnResetMark);
-
-        tvSubject.setText(item.getSubjectName());
-        int dow = DateUtils.toScheduleDayOfWeek(date);
-        String timeStr = Constants.getLessonTimeLabel(dow, item.getLessonNumber());
-        String roomStr = (item.getRoom() != null && !item.getRoom().isEmpty()) ? " · ауд. " + item.getRoom() : "";
-        tvDetails.setText(item.getLessonNumber() + " пара · " + timeStr + roomStr);
-        tvDate.setText(DateUtils.formatDisplayDate(date));
-
-        boolean isFuture = date.isAfter(DateUtils.todayMoscow());
-        if (tvBtnAttendedTitle != null) {
-            tvBtnAttendedTitle.setText(isFuture ? "Пойду на пару" : "Посетил пару");
-        }
-
-        SkippedLessonsManager.AttendanceStatus currentStatus = skippedLessonsManager.getStatus(date, item.getLessonNumber(), item.getSubjectName());
-        if (currentStatus == SkippedLessonsManager.AttendanceStatus.ATTENDED) {
-            tvStatus.setText(isFuture ? "🟢 Отмечено: Пойду" : "🟢 Отмечено: Посещено");
-            tvStatus.setTextColor(ContextCompat.getColor(this, R.color.glass_success));
-            btnReset.setVisibility(View.VISIBLE);
-        } else if (currentStatus == SkippedLessonsManager.AttendanceStatus.SKIPPED) {
-            tvStatus.setText("🔴 Отмечено: Н-ка (пропуск)");
-            tvStatus.setTextColor(ContextCompat.getColor(this, R.color.glass_danger));
-            btnReset.setVisibility(View.VISIBLE);
-        } else {
-            tvStatus.setText("⚪ Не отмечено");
-            tvStatus.setTextColor(ContextCompat.getColor(this, R.color.glass_text_secondary));
-            btnReset.setVisibility(View.GONE);
-        }
-
-        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
-                .setView(dialogView)
-                .create();
-
-        if (btnClose != null) {
-            btnClose.setOnClickListener(v -> dialog.dismiss());
-        }
-
-        cardAttended.setOnClickListener(v -> {
-            skippedLessonsManager.markAttended(date, item.getLessonNumber(), item.getSubjectName());
-            onAttendanceStateChanged();
-            Toast.makeText(this, isFuture ? "Отмечено: Пойду на пару" : "Отмечено: Пара посещена", Toast.LENGTH_SHORT).show();
-            dialog.dismiss();
-        });
-
-        cardSkipped.setOnClickListener(v -> {
-            skippedLessonsManager.markSkipped(date, item.getLessonNumber(), item.getSubjectName());
-            onAttendanceStateChanged();
-            Toast.makeText(this, "Отмечено: Н-ка (пропуск)", Toast.LENGTH_SHORT).show();
-            dialog.dismiss();
-        });
-
-        btnReset.setOnClickListener(v -> {
-            skippedLessonsManager.clearStatus(date, item.getLessonNumber(), item.getSubjectName());
-            onAttendanceStateChanged();
-            Toast.makeText(this, "Отметка сброшена", Toast.LENGTH_SHORT).show();
-            dialog.dismiss();
-        });
-
-        dialog.show();
-        GlassSurfaceHelper.applyGlassDialog(dialog, dialogView);
-
-        Window window = dialog.getWindow();
-        if (window != null) {
-            int width = (int) (getResources().getDisplayMetrics().widthPixels * 0.92);
-            window.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT);
-        }
+        boolean isGroup = GroupOrTeacher.TYPE_GROUP.equals(selType);
+        MarkAttendanceDialog.show(
+                this,
+                item,
+                date,
+                isGroup,
+                attendanceManager,
+                skippedLessonsManager,
+                this::onAttendanceStateChanged
+        );
     }
 
     private void onAttendanceStateChanged() {
@@ -870,8 +962,12 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (ambientBackdrop != null) {
+            ambientBackdrop.reloadPreferences();
+        }
         applyGlassChrome();
         updateTabSelectionVisuals();
+        updateDockMoreBadge();
         LocalDate today = DateUtils.todayMoscow();
         if (builtForDate == null || !builtForDate.equals(today)) {
             calc = repo.getWeekCalculator();
@@ -1006,9 +1102,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void clearWeekCache() {
-        selectionGeneration++;
-        weekCache.clear();
-        loadingWeeks.clear();
+        weekController.clearCache();
         currentWeek = null;
         if (pagerAdapter != null) {
             pagerAdapter.clearWeeks();
@@ -1018,64 +1112,25 @@ public class MainActivity extends AppCompatActivity {
     private void loadWeek() {
         updateWeekHeaderUi();
 
-        WeekSchedule cached = weekCache.get(weekNum);
-        if (cached != null) {
-            currentWeek = cached;
+        boolean cachedHit = weekController.loadWeek(weekNum, selType, selName, (loadedWeek, ws, notesMap, isTarget) -> {
+            pagerAdapter.setWeekSchedule(loadedWeek, ws, notesMap);
+            if (loadedWeek == weekNum) {
+                currentWeek = ws;
+                progressBar.setVisibility(View.GONE);
+                updateDayTabsForWeek();
+                updateClock();
+                LiveLessonService.syncNow(this);
+            }
+        });
+
+        if (cachedHit) {
+            currentWeek = weekController.getCachedWeek(weekNum);
             progressBar.setVisibility(View.GONE);
             updateDayTabsForWeek();
             updateClock();
         } else {
             progressBar.setVisibility(View.VISIBLE);
-            fetchWeekIfNeeded(weekNum);
         }
-
-        if (weekNum > 1) {
-            fetchWeekIfNeeded(weekNum - 1);
-        }
-        if (weekNum < DayPagerAdapter.WEEK_COUNT) {
-            fetchWeekIfNeeded(weekNum + 1);
-        }
-    }
-
-    private void fetchWeekIfNeeded(final int targetWeek) {
-        if (targetWeek < 1 || targetWeek > DayPagerAdapter.WEEK_COUNT) return;
-        if (weekCache.get(targetWeek) != null || loadingWeeks.contains(targetWeek)) return;
-
-        loadingWeeks.add(targetWeek);
-        final int gen = selectionGeneration;
-        final String type = selType;
-        final String name = selName;
-
-        ex.execute(() -> {
-            if (gen != selectionGeneration) return;
-            WeekSchedule ws = GroupOrTeacher.TYPE_GROUP.equals(type)
-                    ? repo.getWeekScheduleForGroup(name, targetWeek)
-                    : repo.getWeekScheduleForTeacher(name, targetWeek);
-            Map<String, Map<Integer, LessonNote>> notesMap = new HashMap<>();
-            if (ws != null && ws.getDays() != null) {
-                for (DaySchedule d : ws.getDays()) {
-                    if (d.getDate() != null) {
-                        String iso = d.getDate().toString();
-                        notesMap.put(iso, repo.getNotesForDate(iso));
-                    }
-                }
-            }
-            runOnUiThread(() -> {
-                if (gen != selectionGeneration) return;
-                loadingWeeks.remove(targetWeek);
-                if (ws != null) {
-                    weekCache.put(targetWeek, ws);
-                }
-                pagerAdapter.setWeekSchedule(targetWeek, ws, notesMap);
-                if (targetWeek == weekNum) {
-                    currentWeek = ws;
-                    progressBar.setVisibility(View.GONE);
-                    updateDayTabsForWeek();
-                    updateClock();
-                    LiveLessonService.syncNow(this);
-                }
-            });
-        });
     }
 
     private void updateClock() {

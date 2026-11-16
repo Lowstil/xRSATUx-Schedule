@@ -39,6 +39,23 @@
             android:textColor="#FFE0EAFF"
             android:textSize="11sp"
             android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widgetRefreshButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/bg_widget_row"
+            android:contentDescription="Обновить виджет"
+            android:gravity="center"
+            android:paddingStart="8dp"
+            android:paddingTop="3dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="3dp"
+            android:text="↻"
+            android:textColor="#FFE0EAFF"
+            android:textSize="13sp"
+            android:textStyle="bold" />
     </LinearLayout>
 
     <!-- Тонкий световой разделитель -->

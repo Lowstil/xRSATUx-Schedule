@@ -9,6 +9,7 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
@@ -48,6 +49,20 @@ public final class RoomTeacherFinderDialog {
     }
 
     public static void show(AppCompatActivity activity) {
+        showInternal(activity, null, null);
+    }
+
+    public static void showForTeacher(AppCompatActivity activity, @Nullable String teacherName) {
+        showInternal(activity, teacherName, null);
+    }
+
+    public static void showForBuilding(AppCompatActivity activity, @Nullable String buildingName) {
+        showInternal(activity, null, buildingName);
+    }
+
+    private static void showInternal(AppCompatActivity activity,
+                                     @Nullable String initialTeacher,
+                                     @Nullable String initialBuilding) {
         if (activity == null || activity.isFinishing()) return;
 
         View view = LayoutInflater.from(activity).inflate(R.layout.dialog_room_teacher_finder, null);
@@ -103,6 +118,18 @@ public final class RoomTeacherFinderDialog {
             @Override public void onTabReselected(TabLayout.Tab tab) { }
         });
 
+        final String preselectedTeacher = initialTeacher != null ? initialTeacher.trim() : "";
+        final boolean hasInitialTeacher = !preselectedTeacher.isEmpty();
+        final boolean hasInitialBuilding = initialBuilding != null && !initialBuilding.trim().isEmpty();
+
+        if (hasInitialBuilding) {
+            TabLayout.Tab roomsTab = tabFinder.getTabAt(1);
+            if (roomsTab != null) roomsTab.select();
+            panelTeacher.setVisibility(View.GONE);
+            panelRooms.setVisibility(View.VISIBLE);
+            chipGroupBuilding.check(chipIdForBuilding(initialBuilding));
+        }
+
         // Initial load of teachers & rooms
         ex.execute(() -> {
             List<String> teachers = dao.extractDistinctTeachers();
@@ -112,12 +139,21 @@ public final class RoomTeacherFinderDialog {
                 allTeachers.addAll(teachers);
                 allRooms.clear();
                 allRooms.addAll(rooms);
-                renderTeacherSuggestions(activity, allTeachers, "", llTeacherSuggestions, teacher -> {
-                    etTeacherSearch.setText(teacher);
-                    loadTeacherSchedule(activity, ex, dao, teacher, queryWeekType, queryDow, rawDow == 0,
+                if (hasInitialTeacher) {
+                    String resolved = resolveTeacherName(allTeachers, preselectedTeacher);
+                    etTeacherSearch.setText(resolved);
+                    etTeacherSearch.setSelection(resolved.length());
+                    loadTeacherSchedule(activity, ex, dao, resolved, queryWeekType, queryDow, rawDow == 0,
                             llTeacherSuggestions, llTeacherResult, tvSelectedTeacherName,
                             tvTeacherNowStatus, llTeacherDayRows);
-                });
+                } else {
+                    renderTeacherSuggestions(activity, allTeachers, "", llTeacherSuggestions, teacher -> {
+                        etTeacherSearch.setText(teacher);
+                        loadTeacherSchedule(activity, ex, dao, teacher, queryWeekType, queryDow, rawDow == 0,
+                                llTeacherSuggestions, llTeacherResult, tvSelectedTeacherName,
+                                tvTeacherNowStatus, llTeacherDayRows);
+                    });
+                }
                 refreshFreeRooms(activity, ex, dao, allRooms, chipGroupBuilding, toggleRoomSlot,
                         queryWeekType, queryDow, rawDow == 0, tvFreeRoomsSummary, llFreeRoomsList);
             });
@@ -348,6 +384,27 @@ public final class RoomTeacherFinderDialog {
                 }
             });
         });
+    }
+
+    private static int chipIdForBuilding(String buildingName) {
+        if (buildingName == null) return R.id.chipBldAll;
+        String b = buildingName.trim().toLowerCase();
+        if (b.contains("главн")) return R.id.chipBldMain;
+        if (b.contains("перв") || b.equals("1") || b.startsWith("1 ")) return R.id.chipBld1;
+        if (b.contains("втор") || b.equals("2") || b.startsWith("2 ")) return R.id.chipBld2;
+        if (b.contains("трет") || b.equals("3") || b.startsWith("3 ")) return R.id.chipBld3;
+        return R.id.chipBldAll;
+    }
+
+    private static String resolveTeacherName(List<String> allTeachers, String query) {
+        for (String t : allTeachers) {
+            if (t.equalsIgnoreCase(query)) return t;
+        }
+        String low = query.toLowerCase();
+        for (String t : allTeachers) {
+            if (t.toLowerCase().contains(low)) return t;
+        }
+        return query;
     }
 
     private static boolean matchesBuilding(String room, int chipId) {

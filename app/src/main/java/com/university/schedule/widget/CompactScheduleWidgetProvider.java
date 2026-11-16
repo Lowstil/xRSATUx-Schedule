@@ -46,15 +46,32 @@ public class CompactScheduleWidgetProvider extends AppWidgetProvider {
 
     @Override
     public void onUpdate(Context context, AppWidgetManager appWidgetManager, int[] appWidgetIds) {
-        for (int widgetId : appWidgetIds) {
-            updateWidget(context, appWidgetManager, widgetId);
-        }
+        if (appWidgetIds == null || appWidgetIds.length == 0) return;
+        final PendingResult pendingResult = goAsync();
+        final Context appCtx = context.getApplicationContext();
+        ex.execute(() -> {
+            try {
+                for (int widgetId : appWidgetIds) {
+                    try {
+                        RemoteViews views = buildRemoteViews(appCtx);
+                        appWidgetManager.updateAppWidget(widgetId, views);
+                    } catch (Exception e) {
+                        Log.e(TAG, "Ошибка обновления компактного виджета", e);
+                    }
+                }
+            } finally {
+                if (pendingResult != null) {
+                    pendingResult.finish();
+                }
+            }
+        });
     }
 
     public static void updateWidget(Context context, AppWidgetManager appWidgetManager, int widgetId) {
+        final Context appCtx = context.getApplicationContext();
         ex.execute(() -> {
             try {
-                RemoteViews views = buildRemoteViews(context);
+                RemoteViews views = buildRemoteViews(appCtx);
                 appWidgetManager.updateAppWidget(widgetId, views);
             } catch (Exception e) {
                 Log.e(TAG, "Ошибка обновления компактного виджета", e);

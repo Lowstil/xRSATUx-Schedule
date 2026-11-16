@@ -48,6 +48,8 @@ public class DayPagerAdapter extends RecyclerView.Adapter<DayPagerAdapter.PageVi
     private AttendanceManager attendanceManager;
     private DayScheduleAdapter.OnLessonClickListener lessonClickListener;
     private DayScheduleAdapter.OnLessonLongClickListener lessonLongClickListener;
+    private DayScheduleAdapter.OnTeacherClickListener teacherClickListener;
+    private DayScheduleAdapter.OnRoomClickListener roomClickListener;
     private int bottomInsetPx = 0;
 
     public static int weekOf(int position) {
@@ -153,6 +155,14 @@ public class DayPagerAdapter extends RecyclerView.Adapter<DayPagerAdapter.PageVi
         this.lessonLongClickListener = l;
     }
 
+    public void setOnTeacherClickListener(DayScheduleAdapter.OnTeacherClickListener l) {
+        this.teacherClickListener = l;
+    }
+
+    public void setOnRoomClickListener(DayScheduleAdapter.OnRoomClickListener l) {
+        this.roomClickListener = l;
+    }
+
     public boolean canPageScrollUp(int position) {
         PageViewHolder h = boundHolders.get(position);
         return h != null && h.recyclerView.canScrollVertically(-1);
@@ -185,6 +195,8 @@ public class DayPagerAdapter extends RecyclerView.Adapter<DayPagerAdapter.PageVi
         dayAdapter.setAttendanceManager(attendanceManager);
         dayAdapter.setOnLessonClickListener(lessonClickListener);
         dayAdapter.setOnLessonLongClickListener(lessonLongClickListener);
+        dayAdapter.setOnTeacherClickListener(teacherClickListener);
+        dayAdapter.setOnRoomClickListener(roomClickListener);
 
         int weekNumber = weekOf(position);
         int dayIndex = dayOf(position);

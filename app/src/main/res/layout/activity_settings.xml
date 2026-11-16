@@ -42,6 +42,113 @@
                 android:orientation="vertical"
                 android:padding="16dp">
 
+                <!-- Live Liquid Glass Preview Card -->
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/cardGlassPreview"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    app:cardBackgroundColor="@android:color/transparent"
+                    app:cardCornerRadius="22dp"
+                    app:cardElevation="0dp"
+                    app:strokeWidth="0dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:padding="14dp">
+
+                        <View
+                            android:id="@+id/previewTypePill"
+                            android:layout_width="4dp"
+                            android:layout_height="match_parent"
+                            android:layout_marginTop="2dp"
+                            android:layout_marginEnd="12dp"
+                            android:layout_marginBottom="2dp"
+                            android:background="#34D399" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal">
+
+                                <View
+                                    android:id="@+id/previewLiveDot"
+                                    android:layout_width="7dp"
+                                    android:layout_height="7dp"
+                                    android:background="@drawable/bg_state_dot" />
+
+                                <TextView
+                                    android:id="@+id/tvPreviewLiveBadge"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="6dp"
+                                    android:letterSpacing="0.06"
+                                    android:paddingStart="8dp"
+                                    android:paddingTop="2dp"
+                                    android:paddingEnd="8dp"
+                                    android:paddingBottom="2dp"
+                                    android:text="LIVE"
+                                    android:textColor="#FFFFFF"
+                                    android:textSize="10sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:id="@+id/tvPreviewTime"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="8dp"
+                                    android:fontFeatureSettings="tnum"
+                                    android:text="10:15 – 11:50"
+                                    android:textColor="@color/glass_text_secondary"
+                                    android:textSize="12sp"
+                                    android:textStyle="bold" />
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:gravity="end"
+                                    android:text="Превью"
+                                    android:textColor="@color/glass_text_secondary"
+                                    android:textSize="11sp" />
+                            </LinearLayout>
+
+                            <TextView
+                                android:id="@+id/tvPreviewSubject"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="6dp"
+                                android:text="Базы данных"
+                                android:textColor="@color/glass_text_primary"
+                                android:textSize="16sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvPreviewRoomPill"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:paddingStart="10dp"
+                                android:paddingTop="4dp"
+                                android:paddingEnd="10dp"
+                                android:paddingBottom="4dp"
+                                android:text="Главный корпус · 519"
+                                android:textColor="@color/glass_text_primary"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
                 <!-- Текущий выбор -->
                 <com.google.android.material.card.MaterialCardView
                     android:id="@+id/cardSelection"

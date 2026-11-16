@@ -9,7 +9,9 @@ import android.util.Log;
 import com.university.schedule.model.LessonNote;
 import com.university.schedule.util.DateUtils;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class NoteDao {
@@ -84,6 +86,49 @@ public class NoteDao {
             Log.e(TAG, "Ошибка чтения заметок за дату " + date, e);
         }
         return map;
+    }
+
+    public List<LessonNote> getAllNotes() {
+        List<LessonNote> list = new ArrayList<>();
+        SQLiteDatabase db = dbHelper.getReadableDatabase();
+        String orderBy = ScheduleContract.NoteEntry.COLUMN_IS_COMPLETED + " ASC, "
+                + ScheduleContract.NoteEntry.COLUMN_DATE + " ASC, "
+                + ScheduleContract.NoteEntry.COLUMN_LESSON_NUMBER + " ASC";
+        try (Cursor c = db.query(ScheduleContract.NoteEntry.TABLE_NAME, null, null, null, null, null, orderBy)) {
+            if (c != null) {
+                while (c.moveToNext()) {
+                    list.add(mapCursor(c));
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Ошибка чтения всех заметок", e);
+        }
+        return list;
+    }
+
+    public int getPendingNotesCount() {
+        SQLiteDatabase db = dbHelper.getReadableDatabase();
+        String sql = "SELECT COUNT(*) FROM " + ScheduleContract.NoteEntry.TABLE_NAME
+                + " WHERE " + ScheduleContract.NoteEntry.COLUMN_IS_COMPLETED + " = 0";
+        try (Cursor c = db.rawQuery(sql, null)) {
+            if (c != null && c.moveToFirst()) {
+                return c.getInt(0);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Ошибка подсчёта активных заметок", e);
+        }
+        return 0;
+    }
+
+    public boolean setCompleted(String date, int lessonNumber, boolean completed) {
+        if (date == null || date.isEmpty()) return false;
+        SQLiteDatabase db = dbHelper.getWritableDatabase();
+        ContentValues cv = new ContentValues();
+        cv.put(ScheduleContract.NoteEntry.COLUMN_IS_COMPLETED, completed ? 1 : 0);
+        String where = ScheduleContract.NoteEntry.COLUMN_DATE + " = ? AND "
+                + ScheduleContract.NoteEntry.COLUMN_LESSON_NUMBER + " = ?";
+        String[] args = new String[]{date, String.valueOf(lessonNumber)};
+        return db.update(ScheduleContract.NoteEntry.TABLE_NAME, cv, where, args) > 0;
     }
 
     private LessonNote mapCursor(Cursor c) {
