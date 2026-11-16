@@ -149,8 +149,7 @@ public class AmbientBackdropView extends View {
 
         prefListener = (prefs, key) -> {
             if (KEY_REDUCED_TRANSPARENCY.equals(key)) {
-                updateAnimationState();
-                invalidate();
+                reloadPreferences();
             }
         };
     }
@@ -176,6 +175,34 @@ public class AmbientBackdropView extends View {
         noise.setPixels(pixels, 0, size, 0, 0, size, size);
         BitmapShader shader = new BitmapShader(noise, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT);
         grainPaint.setShader(shader);
+    }
+
+    /**
+     * Re-reads {@code reduced_transparency} from {@code schedule_prefs} and theme colors,
+     * stops or starts the ambient animation cleanly, and triggers a redraw.
+     */
+    public void reloadPreferences() {
+        loadThemeColors(getContext());
+        int w = getWidth();
+        int h = getHeight();
+        if (w > 0 && h > 0) {
+            float radius = Math.max(w, h) * 0.65f;
+            blob1Shader = createBlobShader(radius, blob1Color);
+            blob2Shader = createBlobShader(radius * 0.95f, blob2Color);
+            blob3Shader = createBlobShader(radius * 0.90f, blob3Color);
+            warmShader = createBlobShader(radius * 0.85f, warmColor);
+
+            blob1Paint.setShader(blob1Shader);
+            blob2Paint.setShader(blob2Shader);
+            blob3Paint.setShader(blob3Shader);
+            warmPaint.setShader(warmShader);
+        }
+
+        if (warmthAnimator == null || !warmthAnimator.isRunning()) {
+            warmth = lessonActive ? 1f : 0f;
+        }
+        updateAnimationState();
+        invalidate();
     }
 
     /**

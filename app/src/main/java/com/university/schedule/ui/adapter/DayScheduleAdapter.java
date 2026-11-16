@@ -8,6 +8,7 @@ import android.graphics.Paint;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
+import android.view.HapticFeedbackConstants;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -50,6 +51,14 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
 
     public interface OnLessonLongClickListener {
         void onLessonLongClicked(ScheduleItem item, LocalDate date);
+    }
+
+    public interface OnTeacherClickListener {
+        void onTeacherClicked(String teacherName);
+    }
+
+    public interface OnRoomClickListener {
+        void onRoomClicked(String rawRoom);
     }
 
     private static final int TYPE_LESSON = 0;
@@ -110,6 +119,8 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     private Map<Integer, LessonNote> notesMap = new HashMap<>();
     private OnLessonClickListener lessonClickListener;
     private OnLessonLongClickListener lessonLongClickListener;
+    private OnTeacherClickListener teacherClickListener;
+    private OnRoomClickListener roomClickListener;
     private Set<String> excludedSubjects = new HashSet<>();
     private SkippedLessonsManager skippedLessonsManager;
     private AttendanceManager attendanceManager;
@@ -130,6 +141,14 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
 
     public void setOnLessonLongClickListener(OnLessonLongClickListener l) {
         this.lessonLongClickListener = l;
+    }
+
+    public void setOnTeacherClickListener(OnTeacherClickListener l) {
+        this.teacherClickListener = l;
+    }
+
+    public void setOnRoomClickListener(OnRoomClickListener l) {
+        this.roomClickListener = l;
     }
 
     public void updateData(List<ScheduleItem> n) {
@@ -312,14 +331,30 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                 setOrHide(h.tvTeacher, it.getTeacherName());
             }
             h.tvGroups.setVisibility(View.GONE);
+            h.tvTeacher.setOnClickListener(null);
+            h.tvTeacher.setClickable(false);
         } else {
-            setOrHide(h.tvTeacher, it.getTeacherName());
+            String teacherName = it.getTeacherName();
+            setOrHide(h.tvTeacher, teacherName);
             h.tvGroups.setVisibility(View.GONE);
+            if (teacherClickListener != null && teacherName != null && !teacherName.trim().isEmpty()) {
+                String trimmedTeacher = teacherName.trim();
+                h.tvTeacher.setClickable(true);
+                h.tvTeacher.setOnClickListener(v -> {
+                    v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                    teacherClickListener.onTeacherClicked(trimmedTeacher);
+                });
+            } else {
+                h.tvTeacher.setOnClickListener(null);
+                h.tvTeacher.setClickable(false);
+            }
         }
 
         RoomFormatter.RoomInfo ri = RoomFormatter.parse(it.getRoom(), dark);
         if (ri == null) {
             h.roomChip.setVisibility(View.GONE);
+            h.roomChip.setOnClickListener(null);
+            h.roomChip.setClickable(false);
         } else {
             h.roomChip.setVisibility(View.VISIBLE);
             h.roomChip.setBackground(tintedRound(ctx, ri.color, roomAlpha, 10));
@@ -331,6 +366,18 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                 h.tvRoom.setTextColor(withAlpha(ri.color, 0.85f));
             } else {
                 h.tvRoom.setVisibility(View.GONE);
+            }
+            String rawRoom = it.getRoom();
+            if (roomClickListener != null && rawRoom != null && !rawRoom.trim().isEmpty()) {
+                String trimmedRoom = rawRoom.trim();
+                h.roomChip.setClickable(true);
+                h.roomChip.setOnClickListener(v -> {
+                    v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                    roomClickListener.onRoomClicked(trimmedRoom);
+                });
+            } else {
+                h.roomChip.setOnClickListener(null);
+                h.roomChip.setClickable(false);
             }
             h.roomChip.requestLayout();
         }

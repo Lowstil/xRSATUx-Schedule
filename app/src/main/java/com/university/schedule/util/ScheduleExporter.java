@@ -12,17 +12,28 @@ import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.text.TextPaint;
+import android.util.TypedValue;
+import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
+import android.view.ViewGroup;
+import android.view.Window;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.university.schedule.R;
 import com.university.schedule.data.ScheduleRepository;
 import com.university.schedule.logic.WeekCalculator;
 import com.university.schedule.model.DaySchedule;
 import com.university.schedule.model.ScheduleItem;
 import com.university.schedule.model.WeekSchedule;
+import com.university.schedule.ui.glass.GlassSurfaceHelper;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -57,15 +68,95 @@ public final class ScheduleExporter {
                 "Текущая неделя — картинка (Liquid Glass)"
         };
 
-        new MaterialAlertDialogBuilder(activity)
-                .setTitle("Поделиться расписанием")
-                .setItems(options, (dialog, which) -> {
-                    boolean fullWeek = (which == 2 || which == 3);
-                    boolean asImage = (which == 1 || which == 3);
-                    exportAndShare(activity, fullWeek, asImage);
-                })
-                .setNegativeButton("Отмена", null)
-                .show();
+        float density = activity.getResources().getDisplayMetrics().density;
+        int pad20 = Math.round(20 * density);
+        int pad14 = Math.round(14 * density);
+        int pad12 = Math.round(12 * density);
+        int gap8 = Math.round(8 * density);
+
+        LinearLayout root = new LinearLayout(activity);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(pad20, pad20, pad20, Math.round(16 * density));
+
+        TextView tvTitle = new TextView(activity);
+        tvTitle.setText("Поделиться расписанием");
+        tvTitle.setTextSize(18f);
+        tvTitle.setTypeface(null, Typeface.BOLD);
+        tvTitle.setTextColor(ContextCompat.getColor(activity, R.color.glass_text_primary));
+        root.addView(tvTitle);
+
+        TextView tvSubtitle = new TextView(activity);
+        tvSubtitle.setText("Выберите формат экспорта");
+        tvSubtitle.setTextSize(13f);
+        tvSubtitle.setTextColor(ContextCompat.getColor(activity, R.color.glass_text_secondary));
+        LinearLayout.LayoutParams subLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        subLp.topMargin = Math.round(2 * density);
+        subLp.bottomMargin = pad14;
+        tvSubtitle.setLayoutParams(subLp);
+        root.addView(tvSubtitle);
+
+        AlertDialog dialog = new MaterialAlertDialogBuilder(activity)
+                .setView(root)
+                .create();
+
+        int primaryText = ContextCompat.getColor(activity, R.color.glass_text_primary);
+        for (int i = 0; i < options.length; i++) {
+            final int which = i;
+            TextView row = new TextView(activity);
+            row.setText(options[i]);
+            row.setTextSize(14f);
+            row.setTypeface(null, Typeface.BOLD);
+            row.setTextColor(primaryText);
+            row.setPadding(pad14, pad12, pad14, pad12);
+            row.setClickable(true);
+            row.setFocusable(true);
+            LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            rowLp.bottomMargin = gap8;
+            row.setLayoutParams(rowLp);
+            GlassSurfaceHelper.applyGlassCard(row, 14f, false);
+            row.setOnClickListener(v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                dialog.dismiss();
+                boolean fullWeek = (which == 2 || which == 3);
+                boolean asImage = (which == 1 || which == 3);
+                exportAndShare(activity, fullWeek, asImage);
+            });
+            root.addView(row);
+        }
+
+        LinearLayout footer = new LinearLayout(activity);
+        footer.setOrientation(LinearLayout.HORIZONTAL);
+        footer.setGravity(Gravity.END);
+        LinearLayout.LayoutParams footerLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        footerLp.topMargin = Math.round(6 * density);
+        footer.setLayoutParams(footerLp);
+
+        TextView btnCancel = new TextView(activity);
+        btnCancel.setText("Отмена");
+        btnCancel.setTextSize(14f);
+        btnCancel.setTypeface(null, Typeface.BOLD);
+        btnCancel.setTextColor(ContextCompat.getColor(activity, R.color.glass_text_secondary));
+        btnCancel.setPadding(Math.round(18 * density), Math.round(10 * density),
+                Math.round(18 * density), Math.round(10 * density));
+        btnCancel.setClickable(true);
+        btnCancel.setFocusable(true);
+        GlassSurfaceHelper.applyGlassCard(btnCancel, 999f, false);
+        btnCancel.setOnClickListener(v -> dialog.dismiss());
+        footer.addView(btnCancel);
+        root.addView(footer);
+
+        dialog.show();
+        GlassSurfaceHelper.applyGlassDialog(dialog, root);
+        Window window = dialog.getWindow();
+        if (window != null) {
+            int maxW = (int) TypedValue.applyDimension(
+                    TypedValue.COMPLEX_UNIT_DIP, 420f, activity.getResources().getDisplayMetrics());
+            int width = Math.min((int) (activity.getResources().getDisplayMetrics().widthPixels * 0.90f), maxW);
+            window.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
     }
 
     public static void exportAndShare(AppCompatActivity activity, boolean fullWeek, boolean asImage) {

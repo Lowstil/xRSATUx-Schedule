@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.util.TypedValue;
+import android.view.HapticFeedbackConstants;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -118,6 +119,7 @@ public class AttendanceDialog {
         rvSubjects.setAdapter(adapterRef[0]);
 
         View.OnClickListener limitClickListener = v -> {
+            v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
             int pct = 30;
             if (v.getId() == R.id.btnSkipLimit20) pct = 20;
             else if (v.getId() == R.id.btnSkipLimit25) pct = 25;
@@ -331,12 +333,14 @@ public class AttendanceDialog {
 
             holder.btnMinus.setOnClickListener(v -> {
                 if (adjustListener != null && sa.missedCount > 0) {
+                    v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
                     adjustListener.onAdjust(sa, -1);
                 }
             });
 
             holder.btnPlus.setOnClickListener(v -> {
                 if (adjustListener != null) {
+                    v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
                     adjustListener.onAdjust(sa, 1);
                 }
             });

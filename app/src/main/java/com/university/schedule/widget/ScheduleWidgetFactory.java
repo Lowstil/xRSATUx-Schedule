@@ -15,17 +15,20 @@ import com.university.schedule.util.Constants;
 import com.university.schedule.util.DateUtils;
 import com.university.schedule.util.RoomFormatter;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Поставляет строки списка виджета — по одной паре на сегодня.
+ * Поставляет строки списка виджета — по одной паре на сегодня (или на завтра,
+ * если на сегодня активных пар больше нет).
  * Работает синхронно: система виджетов вызывает onDataSetChanged()
  * не на UI-потоке приложения, поэтому обращение к БД здесь безопасно.
  */
 public class ScheduleWidgetFactory implements RemoteViewsService.RemoteViewsFactory {
     private final Context context;
     private volatile List<ScheduleItem> lessons = new ArrayList<>();
+    private volatile LocalDate targetDate = DateUtils.todayMoscow();
 
     public ScheduleWidgetFactory(Context context) {
         this.context = context.getApplicationContext();
@@ -50,14 +53,15 @@ public class ScheduleWidgetFactory implements RemoteViewsService.RemoteViewsFact
             String selName = repo.getSelectionName();
             if (selType == null || selName == null) {
                 lessons = new ArrayList<>();
+                targetDate = DateUtils.todayMoscow();
                 return;
             }
             boolean isGroup = GroupOrTeacher.TYPE_GROUP.equals(selType);
-            DaySchedule today = isGroup
-                    ? repo.getTodayScheduleForGroup(selName)
-                    : repo.getTodayScheduleForTeacher(selName);
-            if (today != null && today.hasLessons() && today.getLessons() != null) {
-                lessons = new ArrayList<>(today.getLessons());
+            TodayScheduleWidgetProvider.WidgetScheduleResult res =
+                    TodayScheduleWidgetProvider.resolveWidgetSchedule(repo, selName, isGroup);
+            targetDate = res.date;
+            if (res.daySchedule != null && res.daySchedule.hasLessons() && res.daySchedule.getLessons() != null) {
+                lessons = new ArrayList<>(res.daySchedule.getLessons());
             } else {
                 lessons = new ArrayList<>();
             }
@@ -87,8 +91,9 @@ public class ScheduleWidgetFactory implements RemoteViewsService.RemoteViewsFact
         ScheduleItem it = snapshot.get(position);
         int n = it.getLessonNumber();
         // Перенесённые занятия привязаны к дате напрямую (dayOfWeek=0),
-        // поэтому время звонка берём по-реальному "сегодня".
-        int dow = DateUtils.toScheduleDayOfWeek(DateUtils.todayMoscow());
+        // поэтому время звонка берём по отображаемой дате (сегодня или завтра).
+        LocalDate dateForTime = targetDate != null ? targetDate : DateUtils.todayMoscow();
+        int dow = DateUtils.toScheduleDayOfWeek(dateForTime);
         String time = Constants.getLessonTimeLabel(dow, n);
 
         row.setTextViewText(R.id.widgetLessonNumber, String.valueOf(n));
