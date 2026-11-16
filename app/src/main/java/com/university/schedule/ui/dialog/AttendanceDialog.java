@@ -1,5 +1,6 @@
 package com.university.schedule.ui.dialog;
 
+import android.app.Activity;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
@@ -68,6 +69,9 @@ public class AttendanceDialog {
     private static void showInternal(@NonNull Context context,
                                      @NonNull String groupName,
                                      @Nullable Runnable onChanged) {
+        if (context instanceof Activity act && (act.isFinishing() || act.isDestroyed())) {
+            return;
+        }
         AttendanceManager mgr = new AttendanceManager(context);
         View dialogView = LayoutInflater.from(context).inflate(R.layout.dialog_attendance, null);
 

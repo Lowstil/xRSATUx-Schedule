@@ -65,6 +65,9 @@ public class ScheduleFilter {
                                           String matchName,
                                           boolean isGroup) {
         WeekSchedule week = new WeekSchedule(weekNumber, "even".equals(weekType));
+        if (mondayOfWeek == null) {
+            return week;
+        }
         List<DaySchedule> days = new ArrayList<>();
         for (int dow = 1; dow <= 6; dow++) {
             LocalDate date = DateUtils.dateForDayInWeek(mondayOfWeek, dow);

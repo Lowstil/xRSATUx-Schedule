@@ -28,6 +28,8 @@ public class ScheduleItem {
     private boolean movedIn;       // true = занятие добавлено переносом (пары изначально не было)
     private boolean roomChanged;   // true = аудитория изменена переносом (исходная room затёрта новой)
     private String transferNote;   // например "Перенесено с 09.02.2026, 3 пара" или "Замена: Иванов И.И."
+    private boolean custom;        // true = пользовательское событие (CustomEvent)
+    private long customId;         // id записи в таблице custom_events
 
     public boolean isCancelled() { return cancelled; }
     public void setCancelled(boolean cancelled) { this.cancelled = cancelled; }
@@ -40,6 +42,12 @@ public class ScheduleItem {
 
     public String getTransferNote() { return transferNote; }
     public void setTransferNote(String transferNote) { this.transferNote = transferNote; }
+
+    public boolean isCustom() { return custom; }
+    public void setCustom(boolean custom) { this.custom = custom; }
+
+    public long getCustomId() { return customId; }
+    public void setCustomId(long customId) { this.customId = customId; }
 
     /** Любой вид переноса/замены — удобный флаг для UI (бейдж/подсветка). */
     public boolean isTransferred() { return movedIn || roomChanged || (transferNote != null && !transferNote.isEmpty()); }

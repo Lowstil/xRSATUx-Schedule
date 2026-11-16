@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -58,11 +59,11 @@ public class ExcelParser {
 
     private Sheet findTargetSheet(Workbook wb, String keyword, int defaultIndex, String source) {
         if (keyword != null) {
-            String lowKeyword = keyword.toLowerCase();
+            String lowKeyword = keyword.toLowerCase(Locale.ROOT);
             for (int i = 0; i < wb.getNumberOfSheets(); i++) {
                 String name = wb.getSheetName(i);
                 if (name == null) continue;
-                String low = name.toLowerCase();
+                String low = name.toLowerCase(Locale.ROOT);
                 if (ScheduleDao.SOURCE_GROUP.equals(source)) {
                     if (low.contains(lowKeyword) && !low.contains("преподават") && !low.contains("помещен")) {
                         return wb.getSheetAt(i);
@@ -99,6 +100,7 @@ public class ExcelParser {
             }
             Row headerRow = sheet.getRow(headerRowIdx);
             int headerLen = headerRow.getLastCellNum();
+            if (headerLen <= 0) return result;
             String[] header = new String[headerLen];
             for (int c = 0; c < headerLen; c++) {
                 header[c] = trim(getStr(headerRow.getCell(c)));
@@ -145,16 +147,17 @@ public class ExcelParser {
     }
 
     private int findHeaderRow(Sheet sheet) {
-        int limit = Math.min(6, sheet.getLastRowNum() + 1);
+        int limit = Math.min(9, sheet.getLastRowNum() + 1);
         for (int r = 0; r < limit; r++) {
             Row row = sheet.getRow(r);
             if (row == null) continue;
             String c1 = trim(getStr(row.getCell(1)));
+            String c1Low = c1.toLowerCase(Locale.ROOT);
             if ("Группа".equalsIgnoreCase(c1)
                     || "Преподаватель".equalsIgnoreCase(c1)
                     || "Преподаватели".equalsIgnoreCase(c1)
-                    || c1.toLowerCase().contains("групп")
-                    || c1.toLowerCase().contains("преподават")) {
+                    || c1Low.contains("групп")
+                    || c1Low.contains("преподават")) {
                 return r;
             }
             if (row.getLastCellNum() > 3) {
@@ -326,7 +329,7 @@ public class ExcelParser {
         
         // 3. Однословные аудитории и стандартные токены (Г-417, 1-114 и т.д.)
         String last = tt.get(tt.size() - 1);
-        if (ROOM_ONE_WORD.contains(last.toLowerCase()) || ROOM_TOKEN.matcher(last).matches()) {
+        if (ROOM_ONE_WORD.contains(last.toLowerCase(Locale.ROOT)) || ROOM_TOKEN.matcher(last).matches()) {
             tt.remove(tt.size() - 1);
             return last;
         }
@@ -366,7 +369,7 @@ public class ExcelParser {
 
     private String parseWeekType(String s) {
         if (s == null || s.isEmpty()) return null;
-        String l = s.toLowerCase();
+        String l = s.toLowerCase(Locale.ROOT);
         if (l.contains("нечёт") || l.contains("нечет")) return Constants.WEEK_TYPE_ODD;
         if (l.contains("чёт") || l.contains("чет")) return Constants.WEEK_TYPE_EVEN;
         return null;
@@ -384,8 +387,10 @@ public class ExcelParser {
         if (s == null) return -1;
         String d = s.replaceAll("[^0-9]", "");
         if (!d.isEmpty()) {
-            int n = d.charAt(0) - '0';
-            if (n >= 1 && n <= 7) return n;
+            try {
+                int n = Integer.parseInt(d);
+                if (n >= 1 && n <= 7) return n;
+            } catch (NumberFormatException ignored) { }
         }
         return -1;
     }
@@ -433,8 +438,17 @@ public class ExcelParser {
 
         @Override
         public int read(byte[] b, int off, int len) throws IOException {
-            checkLimit(len);
-            int n = delegate.read(b, off, len);
+            if (len <= 0) return delegate.read(b, off, len);
+            long remaining = maxBytes - readSoFar;
+            if (remaining <= 0) {
+                if (delegate.read() != -1) {
+                    throw new IOException("Файл расписания превышает допустимый размер ("
+                            + maxBytes + " байт) — разбор остановлен");
+                }
+                return -1;
+            }
+            int toRead = (int) Math.min(len, remaining);
+            int n = delegate.read(b, off, toRead);
             if (n > 0) readSoFar += n;
             return n;
         }

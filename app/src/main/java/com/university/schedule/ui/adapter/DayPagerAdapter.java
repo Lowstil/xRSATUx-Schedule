@@ -120,14 +120,30 @@ public class DayPagerAdapter extends RecyclerView.Adapter<DayPagerAdapter.PageVi
     }
 
     public void applyClock(ScheduleClock.State state, ScheduleClock.LessonKey nextKey, NextLesson nextLesson) {
+        updateClockOnly(state, nextKey, nextLesson);
+    }
+
+    public void updateClockOnly(ScheduleClock.State state, ScheduleClock.LessonKey nextKey, NextLesson nextLesson) {
         this.clockState = state;
         this.nextKey = nextKey;
         this.nextLesson = nextLesson;
         for (int i = 0; i < boundHolders.size(); i++) {
             int pos = boundHolders.keyAt(i);
             PageViewHolder h = boundHolders.valueAt(i);
-            if (h != null) {
-                bindPage(h, pos);
+            if (h == null) continue;
+            int weekNumber = weekOf(pos);
+            int dayIndex = dayOf(pos);
+            WeekSchedule ws = weekCache.get(weekNumber);
+            if (ws == null || ws.getDays() == null || dayIndex >= ws.getDays().size()) {
+                h.dayAdapter.updateClockOnly(null, null, null);
+                continue;
+            }
+            DaySchedule day = ws.getDays().get(dayIndex);
+            LocalDate dayDate = day.getDate();
+            if (day.isDayOff() || !day.hasLessons()) {
+                h.dayAdapter.updateClockOnly(dayDate, null, null);
+            } else {
+                h.dayAdapter.updateClockOnly(dayDate, state, nextKey);
             }
         }
     }

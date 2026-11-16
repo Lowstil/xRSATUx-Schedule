@@ -53,6 +53,7 @@ public class ScheduleDao {
 
     /** Строки листа "группы" для конкретной группы и типа недели. */
     public List<ScheduleItem> getScheduleForGroup(String groupName, String weekType) {
+        if (groupName == null || weekType == null) return new ArrayList<>();
         String selection = ScheduleEntry.COLUMN_GROUP_NAME + " = ? AND " +
                 ScheduleEntry.COLUMN_SOURCE + " = ? AND " +
                 ScheduleEntry.COLUMN_WEEK_TYPE + " = ?";
@@ -62,6 +63,7 @@ public class ScheduleDao {
 
     /** Строки листа "преподаватели" для конкретного преподавателя и типа недели. */
     public List<ScheduleItem> getScheduleForTeacher(String teacherName, String weekType) {
+        if (teacherName == null || weekType == null) return new ArrayList<>();
         String selection = ScheduleEntry.COLUMN_TEACHER_NAME + " = ? AND " +
                 ScheduleEntry.COLUMN_SOURCE + " = ? AND " +
                 ScheduleEntry.COLUMN_WEEK_TYPE + " = ?";
@@ -188,6 +190,11 @@ public class ScheduleDao {
 
     private List<ScheduleItem> query(String selection, String[] args) {
         List<ScheduleItem> result = new ArrayList<>();
+        if (args != null) {
+            for (String arg : args) {
+                if (arg == null) return result;
+            }
+        }
         SQLiteDatabase db = dbHelper.getReadableDatabase();
         try (Cursor cursor = db.query(
                 ScheduleEntry.TABLE_NAME,

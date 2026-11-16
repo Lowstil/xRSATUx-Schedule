@@ -308,20 +308,31 @@ public class NetworkClient {
     }
 
     private File copyFromAssets(String cacheFileName) {
-        try (InputStream is = context.getAssets().open(ASSET_NAME)) {
-            File cacheFile = new File(context.getCacheDir(), cacheFileName);
-            try (OutputStream os = new FileOutputStream(cacheFile)) {
-                byte[] buf = new byte[8192];
-                int len;
-                while ((len = is.read(buf)) != -1) os.write(buf, 0, len);
-                os.flush();
-            }
-            Log.d(TAG, "Взято из assets: " + cacheFile.length() + " байт");
-            return cacheFile;
+        File cacheFile = new File(context.getCacheDir(), cacheFileName);
+        File tmpFile = new File(context.getCacheDir(), cacheFileName + ".tmp");
+        try (InputStream is = context.getAssets().open(ASSET_NAME);
+             OutputStream os = new FileOutputStream(tmpFile)) {
+            byte[] buf = new byte[8192];
+            int len;
+            while ((len = is.read(buf)) != -1) os.write(buf, 0, len);
+            os.flush();
         } catch (IOException e) {
+            //noinspection ResultOfMethodCallIgnored
+            tmpFile.delete();
             Log.e(TAG, "В assets нет " + ASSET_NAME + ": " + e.getMessage());
             return null;
         }
+        if (cacheFile.exists() && !cacheFile.delete()) {
+            Log.w(TAG, "Не удалось удалить старый файл кэша перед копированием из assets");
+        }
+        if (!tmpFile.renameTo(cacheFile)) {
+            //noinspection ResultOfMethodCallIgnored
+            tmpFile.delete();
+            Log.e(TAG, "Не удалось переименовать временный файл из assets");
+            return null;
+        }
+        Log.d(TAG, "Взято из assets: " + cacheFile.length() + " байт");
+        return cacheFile;
     }
 
     public File getCachedFile() {

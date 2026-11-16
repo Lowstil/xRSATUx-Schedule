@@ -39,13 +39,13 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         db.execSQL(ScheduleContract.SQL_CREATE_INDEX_TRANSFERS);
         db.execSQL(ScheduleContract.SQL_CREATE_NOTES);
         db.execSQL(ScheduleContract.SQL_CREATE_INDEX_NOTES);
+        db.execSQL(ScheduleContract.SQL_CREATE_CUSTOM_EVENTS);
+        db.execSQL(ScheduleContract.SQL_CREATE_INDEX_CUSTOM_EVENTS);
     }
 
     @Override
     public void onOpen(SQLiteDatabase db) {
         super.onOpen(db);
-        db.execSQL(ScheduleContract.SQL_CREATE_NOTES);
-        db.execSQL(ScheduleContract.SQL_CREATE_INDEX_NOTES);
     }
 
     @Override
@@ -63,6 +63,10 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             } catch (Exception e) {
                 Log.w(TAG, "Колонка image_path уже существует или не может быть добавлена: " + e.getMessage());
             }
+        }
+        if (oldVersion < 5) {
+            db.execSQL(ScheduleContract.SQL_CREATE_CUSTOM_EVENTS);
+            db.execSQL(ScheduleContract.SQL_CREATE_INDEX_CUSTOM_EVENTS);
         }
     }
 

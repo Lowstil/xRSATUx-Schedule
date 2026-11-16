@@ -1,10 +1,12 @@
 package com.university.schedule.notification;
 
+import android.Manifest;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.os.Build;
 
 import androidx.core.app.NotificationCompat;
@@ -91,8 +93,9 @@ public final class NotificationHelper {
                 .setPriority(NotificationCompat.PRIORITY_HIGH);
 
         NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-        if (nm != null) {
-            nm.notify(ID_REMINDER, b.build());
+        if (nm != null && canPostNotifications(context)) {
+            int notifId = 1100 + Math.max(0, lessonNum);
+            nm.notify(notifId, b.build());
         }
     }
 
@@ -128,7 +131,7 @@ public final class NotificationHelper {
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT);
 
         NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-        if (nm != null) {
+        if (nm != null && canPostNotifications(context)) {
             nm.notify(ID_DIGEST, b.build());
         }
     }
@@ -151,9 +154,17 @@ public final class NotificationHelper {
                 .setPriority(NotificationCompat.PRIORITY_HIGH);
 
         NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-        if (nm != null) {
+        if (nm != null && canPostNotifications(context)) {
             nm.notify(ID_TRANSFER, b.build());
         }
+    }
+
+    private static boolean canPostNotifications(Context context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            return ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+                    == PackageManager.PERMISSION_GRANTED;
+        }
+        return true;
     }
 
     private static String pluralLessons(int n) {

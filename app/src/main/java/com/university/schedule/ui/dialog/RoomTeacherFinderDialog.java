@@ -34,6 +34,7 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -63,7 +64,7 @@ public final class RoomTeacherFinderDialog {
     private static void showInternal(AppCompatActivity activity,
                                      @Nullable String initialTeacher,
                                      @Nullable String initialBuilding) {
-        if (activity == null || activity.isFinishing()) return;
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
 
         View view = LayoutInflater.from(activity).inflate(R.layout.dialog_room_teacher_finder, null);
         View rootCard = view.findViewById(R.id.rootGlassCard);
@@ -135,6 +136,7 @@ public final class RoomTeacherFinderDialog {
             List<String> teachers = dao.extractDistinctTeachers();
             List<String> rooms = dao.extractDistinctRooms();
             activity.runOnUiThread(() -> {
+                if (activity.isFinishing() || activity.isDestroyed() || !dialog.isShowing()) return;
                 allTeachers.clear();
                 allTeachers.addAll(teachers);
                 allRooms.clear();
@@ -207,10 +209,10 @@ public final class RoomTeacherFinderDialog {
                                                  String query, LinearLayout container,
                                                  OnTeacherClickListener listener) {
         container.removeAllViews();
-        String low = query.toLowerCase();
+        String low = query.toLowerCase(Locale.ROOT);
         int shown = 0;
         for (String t : allTeachers) {
-            if (!low.isEmpty() && !t.toLowerCase().contains(low)) continue;
+            if (!low.isEmpty() && !t.toLowerCase(Locale.ROOT).contains(low)) continue;
             TextView tv = new TextView(activity);
             tv.setText(t);
             tv.setTextColor(ContextCompat.getColor(activity, R.color.glass_text_primary));
@@ -286,6 +288,7 @@ public final class RoomTeacherFinderDialog {
 
             final String finalStatus = nowStatusText;
             activity.runOnUiThread(() -> {
+                if (activity.isFinishing() || activity.isDestroyed()) return;
                 tvNowStatus.setText(finalStatus);
                 GlassSurfaceHelper.applyGlassCard(tvNowStatus, 14f, true);
                 llDayRows.removeAllViews();
@@ -341,6 +344,7 @@ public final class RoomTeacherFinderDialog {
                 }
             }
             activity.runOnUiThread(() -> {
+                if (activity.isFinishing() || activity.isDestroyed()) return;
                 String summary = (isSunday ? "Воскресенье (показан ПН)" : "Сегодня (" + dayName + ", " + wtLabel + ")")
                         + " · " + slot + " пара (" + timeLabel + ") · свободно: " + free.size();
                 tvSummary.setText(summary);
@@ -388,7 +392,7 @@ public final class RoomTeacherFinderDialog {
 
     private static int chipIdForBuilding(String buildingName) {
         if (buildingName == null) return R.id.chipBldAll;
-        String b = buildingName.trim().toLowerCase();
+        String b = buildingName.trim().toLowerCase(Locale.ROOT);
         if (b.contains("главн")) return R.id.chipBldMain;
         if (b.contains("перв") || b.equals("1") || b.startsWith("1 ")) return R.id.chipBld1;
         if (b.contains("втор") || b.equals("2") || b.startsWith("2 ")) return R.id.chipBld2;
@@ -400,9 +404,9 @@ public final class RoomTeacherFinderDialog {
         for (String t : allTeachers) {
             if (t.equalsIgnoreCase(query)) return t;
         }
-        String low = query.toLowerCase();
+        String low = query.toLowerCase(Locale.ROOT);
         for (String t : allTeachers) {
-            if (t.toLowerCase().contains(low)) return t;
+            if (t.toLowerCase(Locale.ROOT).contains(low)) return t;
         }
         return query;
     }
@@ -411,7 +415,7 @@ public final class RoomTeacherFinderDialog {
         if (chipId == R.id.chipBldAll || chipId == View.NO_ID) {
             return true;
         }
-        String r = room.trim().toUpperCase();
+        String r = room.trim().toUpperCase(Locale.ROOT);
         if (chipId == R.id.chipBldMain) return r.startsWith("Г-") || r.startsWith("Г ");
         if (chipId == R.id.chipBld1) return r.startsWith("1-");
         if (chipId == R.id.chipBld2) return r.startsWith("2-");

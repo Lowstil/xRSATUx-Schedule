@@ -2,11 +2,11 @@ package com.university.schedule.ui.activity;
 
 import android.Manifest;
 import android.app.DatePickerDialog;
+import android.app.Dialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
-import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.Editable;
@@ -52,6 +52,7 @@ import com.university.schedule.util.ThemeManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -72,23 +73,21 @@ public class SettingsActivity extends AppCompatActivity {
     private SwitchMaterial switchLessonReminder, switchMorningDigest, switchLiveLessonNotif, switchReducedTransparency;
     private MaterialButtonToggleGroup toggleReminderMinutes;
     private View cardExcludedSubjects;
-    private View cardGlassPreview;
-    private View previewTypePill;
-    private View previewLiveDot;
-    private TextView tvPreviewLiveBadge;
-    private TextView tvPreviewRoomPill;
     private AmbientBackdropView ambientBackdrop;
     private TextView tvExcludedSubjectsSummary;
     private MaterialButton btnSelectExcludedSubjects;
     private boolean suppressThemeCallback;
     private boolean suppressReminderCallback;
     private boolean suppressGlassCallback;
+    private final List<Dialog> activeDialogs = new ArrayList<>();
 
     @Override
     protected void onCreate(Bundle s) {
         super.onCreate(s);
+        EdgeToEdgeCompat.enableEdgeToEdge(this);
         setContentView(R.layout.activity_settings);
-        EdgeToEdgeCompat.applyEdgeToEdgeInsets(findViewById(R.id.settingsContentContainer));
+        EdgeToEdgeCompat.applySystemBarInsets(findViewById(R.id.settingsContentContainer), true, false);
+        EdgeToEdgeCompat.applySystemBarInsets(findViewById(R.id.settingsScrollView), false, true);
         repo = ScheduleRepository.getInstance(this);
         prefs = new PrefsManager(this);
         excludedManager = new ExcludedSubjectsManager(this);
@@ -117,11 +116,6 @@ public class SettingsActivity extends AppCompatActivity {
         switchReducedTransparency = findViewById(R.id.switchReducedTransparency);
 
         cardExcludedSubjects = findViewById(R.id.cardExcludedSubjects);
-        cardGlassPreview = findViewById(R.id.cardGlassPreview);
-        previewTypePill = findViewById(R.id.previewTypePill);
-        previewLiveDot = findViewById(R.id.previewLiveDot);
-        tvPreviewLiveBadge = findViewById(R.id.tvPreviewLiveBadge);
-        tvPreviewRoomPill = findViewById(R.id.tvPreviewRoomPill);
         tvExcludedSubjectsSummary = findViewById(R.id.tvExcludedSubjectsSummary);
         btnSelectExcludedSubjects = findViewById(R.id.btnSelectExcludedSubjects);
 
@@ -150,11 +144,6 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void applyGlassCards() {
-        if (cardGlassPreview != null) {
-            GlassSurfaceHelper.applyLessonStateGlass(cardGlassPreview, 22f, 1);
-        }
-        stylePreviewPills();
-
         int[] cardIds = {
                 R.id.cardSelection,
                 R.id.cardTools,
@@ -170,34 +159,6 @@ public class SettingsActivity extends AppCompatActivity {
             if (card != null) {
                 GlassSurfaceHelper.applyGlassCard(card, 22f, false);
             }
-        }
-    }
-
-    private void stylePreviewPills() {
-        float density = getResources().getDisplayMetrics().density;
-        int emerald = 0xFF10B981;
-
-        if (previewTypePill != null) {
-            GradientDrawable pill = new GradientDrawable();
-            pill.setColor(0xFF34D399);
-            pill.setCornerRadius(2f * density);
-            previewTypePill.setBackground(pill);
-        }
-        if (previewLiveDot != null) {
-            previewLiveDot.setBackgroundTintList(ColorStateList.valueOf(emerald));
-        }
-        if (tvPreviewLiveBadge != null) {
-            GradientDrawable badge = new GradientDrawable();
-            badge.setColor(emerald);
-            badge.setCornerRadius(100f * density);
-            tvPreviewLiveBadge.setBackground(badge);
-        }
-        if (tvPreviewRoomPill != null) {
-            GradientDrawable roomBg = new GradientDrawable();
-            roomBg.setColor(ContextCompat.getColor(this, R.color.glass_capsule));
-            roomBg.setStroke(Math.max(1, Math.round(density)), ContextCompat.getColor(this, R.color.glass_stroke_start));
-            roomBg.setCornerRadius(12f * density);
-            tvPreviewRoomPill.setBackground(roomBg);
         }
     }
 
@@ -309,16 +270,19 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void pickDate() {
+        if (isFinishing() || isDestroyed()) return;
         LocalDate cur = repo.getSemesterStart();
         if (cur == null) cur = SemesterManager.getDefaultSemesterStart();
-        new DatePickerDialog(this, R.style.ThemeOverlay_UniSchedule_DatePicker, (v, y, m, d) -> {
+        DatePickerDialog dpd = new DatePickerDialog(this, R.style.ThemeOverlay_UniSchedule_DatePicker, (v, y, m, d) -> {
             LocalDate sel = LocalDate.of(y, m + 1, d);
             LocalDate mon = DateUtils.mondayOfWeek(sel);
             if (mon.isAfter(sel)) mon = mon.minusWeeks(1);
             repo.updateSemesterStart(mon);
             updateInfo();
             Toast.makeText(this, "Начало семестра: " + DateUtils.formatDisplayDate(mon), Toast.LENGTH_SHORT).show();
-        }, cur.getYear(), cur.getMonthValue() - 1, cur.getDayOfMonth()).show();
+        }, cur.getYear(), cur.getMonthValue() - 1, cur.getDayOfMonth());
+        trackDialog(dpd);
+        dpd.show();
     }
 
     private void doRefresh() {
@@ -328,6 +292,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onSuccess() {
                 runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) return;
                     btnRefresh.setEnabled(true);
                     btnRefresh.setText(R.string.settings_refresh);
                     updateInfo();
@@ -339,6 +304,7 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void onError(AppError error) {
                 runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) return;
                     btnRefresh.setEnabled(true);
                     btnRefresh.setText(R.string.settings_refresh);
                     Toast.makeText(SettingsActivity.this, error.userMessage, Toast.LENGTH_LONG).show();
@@ -443,6 +409,7 @@ public class SettingsActivity extends AppCompatActivity {
             ex.execute(() -> {
                 repo.clearAllData();
                 runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) return;
                     Toast.makeText(this, "Данные очищены", Toast.LENGTH_SHORT).show();
                     Intent i = new Intent(this, SelectionActivity.class);
                     i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
@@ -452,6 +419,7 @@ public class SettingsActivity extends AppCompatActivity {
             });
         });
 
+        trackDialog(dialog);
         dialog.show();
         GlassSurfaceHelper.applyGlassDialog(dialog, root);
     }
@@ -460,6 +428,7 @@ public class SettingsActivity extends AppCompatActivity {
         ex.execute(() -> {
             List<String> subjects = repo.getDistinctSubjectsForGroup(groupName);
             runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
                 if (subjects == null || subjects.isEmpty()) {
                     Toast.makeText(this, "Предметы группы не найдены. Обновите расписание.", Toast.LENGTH_SHORT).show();
                     return;
@@ -514,6 +483,7 @@ public class SettingsActivity extends AppCompatActivity {
                     });
                 }
 
+                trackDialog(dialog);
                 dialog.show();
                 GlassSurfaceHelper.applyGlassDialog(dialog, view);
 
@@ -593,8 +563,23 @@ public class SettingsActivity extends AppCompatActivity {
         tvCount.setText("Выбрано: " + selectedCount + " из " + totalCount);
     }
 
+    private void trackDialog(Dialog dialog) {
+        if (dialog == null) return;
+        activeDialogs.add(dialog);
+        dialog.setOnDismissListener(d -> activeDialogs.remove(dialog));
+    }
+
     @Override
     protected void onDestroy() {
+        for (Dialog d : new ArrayList<>(activeDialogs)) {
+            if (d != null && d.isShowing()) {
+                try {
+                    d.dismiss();
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        activeDialogs.clear();
         super.onDestroy();
         ex.shutdown();
     }

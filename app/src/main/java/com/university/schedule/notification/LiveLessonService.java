@@ -153,7 +153,7 @@ public final class LiveLessonService {
                 LocalTime start = LocalTime.parse(times[n - 1][0], TF);
                 LocalTime end = LocalTime.parse(times[n - 1][1], TF);
 
-                if (!now.isBefore(start) && now.isBefore(end)) {
+                if (!now.isBefore(start) && !now.isAfter(end)) {
                     if (currentItem == null) {
                         currentItem = item;
                         currentStart = start;

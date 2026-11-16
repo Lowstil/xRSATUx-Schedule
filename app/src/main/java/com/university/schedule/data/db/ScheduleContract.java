@@ -17,7 +17,7 @@ public final class ScheduleContract {
     }
 
     public static final String DATABASE_NAME = "unischedule.db";
-    public static final int DATABASE_VERSION = 4; // v4: добавлено поле image_path в таблицу notes
+    public static final int DATABASE_VERSION = 5; // v5: добавлена таблица custom_events
 
     /**
      * Переносы занятий (лист "Переносы" в отдельном xlsx-файле). В отличие от
@@ -94,6 +94,21 @@ public final class ScheduleContract {
         public static final String COLUMN_IS_COMPLETED = "is_completed";
         public static final String COLUMN_CREATED_AT = "created_at";
         public static final String INDEX_NOTES = "idx_notes_date_lesson";
+    }
+
+    public static final class CustomEventEntry implements BaseColumns {
+        public static final String TABLE_NAME = "custom_events";
+        public static final String COLUMN_GROUP_NAME = "group_name";
+        public static final String COLUMN_IS_GROUP = "is_group";
+        public static final String COLUMN_DATE_ISO = "date_iso";
+        public static final String COLUMN_DAY_OF_WEEK = "day_of_week";
+        public static final String COLUMN_WEEK_TYPE = "week_type";
+        public static final String COLUMN_LESSON_NUMBER = "lesson_number";
+        public static final String COLUMN_SUBJECT_NAME = "subject_name";
+        public static final String COLUMN_TEACHER_NAME = "teacher_name";
+        public static final String COLUMN_ROOM = "room";
+        public static final String COLUMN_NOTE = "note";
+        public static final String INDEX_CUSTOM_EVENTS = "idx_custom_events_target";
     }
 
     public static final String SQL_CREATE_USER_SETTINGS =
@@ -173,6 +188,24 @@ public final class ScheduleContract {
             "CREATE INDEX IF NOT EXISTS " + NoteEntry.INDEX_NOTES + " ON " + NoteEntry.TABLE_NAME +
                     "(" + NoteEntry.COLUMN_DATE + ", " + NoteEntry.COLUMN_LESSON_NUMBER + ")";
 
+    public static final String SQL_CREATE_CUSTOM_EVENTS =
+            "CREATE TABLE IF NOT EXISTS " + CustomEventEntry.TABLE_NAME + " (" +
+                    CustomEventEntry._ID + " INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                    CustomEventEntry.COLUMN_GROUP_NAME + " TEXT, " +
+                    CustomEventEntry.COLUMN_IS_GROUP + " INTEGER NOT NULL DEFAULT 1, " +
+                    CustomEventEntry.COLUMN_DATE_ISO + " TEXT, " +
+                    CustomEventEntry.COLUMN_DAY_OF_WEEK + " INTEGER NOT NULL DEFAULT 0, " +
+                    CustomEventEntry.COLUMN_WEEK_TYPE + " TEXT, " +
+                    CustomEventEntry.COLUMN_LESSON_NUMBER + " INTEGER NOT NULL, " +
+                    CustomEventEntry.COLUMN_SUBJECT_NAME + " TEXT NOT NULL, " +
+                    CustomEventEntry.COLUMN_TEACHER_NAME + " TEXT, " +
+                    CustomEventEntry.COLUMN_ROOM + " TEXT, " +
+                    CustomEventEntry.COLUMN_NOTE + " TEXT)";
+
+    public static final String SQL_CREATE_INDEX_CUSTOM_EVENTS =
+            "CREATE INDEX IF NOT EXISTS " + CustomEventEntry.INDEX_CUSTOM_EVENTS + " ON " + CustomEventEntry.TABLE_NAME +
+                    "(" + CustomEventEntry.COLUMN_GROUP_NAME + ", " + CustomEventEntry.COLUMN_IS_GROUP + ")";
+
     public static final String SQL_DELETE_USER_SETTINGS =
             "DROP TABLE IF EXISTS " + UserSettingsEntry.TABLE_NAME;
     public static final String SQL_DELETE_SCHEDULE =
@@ -183,4 +216,6 @@ public final class ScheduleContract {
             "DROP TABLE IF EXISTS " + TransferEntry.TABLE_NAME;
     public static final String SQL_DELETE_NOTES =
             "DROP TABLE IF EXISTS " + NoteEntry.TABLE_NAME;
+    public static final String SQL_DELETE_CUSTOM_EVENTS =
+            "DROP TABLE IF EXISTS " + CustomEventEntry.TABLE_NAME;
 }
