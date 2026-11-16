@@ -17,7 +17,7 @@ public final class ScheduleContract {
     }
 
     public static final String DATABASE_NAME = "unischedule.db";
-    public static final int DATABASE_VERSION = 5; // v5: добавлена таблица custom_events
+    public static final int DATABASE_VERSION = 6; // v6: добавлен semester_id в schedule
 
     /**
      * Переносы занятий (лист "Переносы" в отдельном xlsx-файле). В отличие от
@@ -71,9 +71,11 @@ public final class ScheduleContract {
         public static final String COLUMN_ROOM = "room";
         public static final String COLUMN_WEEK_SPEC = "week_spec";
         public static final String COLUMN_SOURCE = "source";
+        public static final String COLUMN_SEMESTER_ID = "semester_id";
 
         public static final String INDEX_GROUP = "idx_schedule_group";
         public static final String INDEX_TEACHER = "idx_schedule_teacher";
+        public static final String INDEX_SEMESTER = "idx_schedule_semester";
     }
 
     public static final class HolidayEntry implements BaseColumns {
@@ -131,7 +133,8 @@ public final class ScheduleContract {
                     ScheduleEntry.COLUMN_LESSON_TYPE + " TEXT NOT NULL, " +
                     ScheduleEntry.COLUMN_ROOM + " TEXT, " +
                     ScheduleEntry.COLUMN_WEEK_SPEC + " TEXT, " +
-                    ScheduleEntry.COLUMN_SOURCE + " TEXT NOT NULL)";
+                    ScheduleEntry.COLUMN_SOURCE + " TEXT NOT NULL, " +
+                    ScheduleEntry.COLUMN_SEMESTER_ID + " TEXT NOT NULL DEFAULT 'fall')";
 
     public static final String SQL_CREATE_INDEX_GROUP =
             "CREATE INDEX " + ScheduleEntry.INDEX_GROUP + " ON " + ScheduleEntry.TABLE_NAME +
@@ -146,6 +149,10 @@ public final class ScheduleContract {
                     ScheduleEntry.COLUMN_SOURCE + ", " +
                     ScheduleEntry.COLUMN_WEEK_TYPE + ", " +
                     ScheduleEntry.COLUMN_DAY_OF_WEEK + ")";
+
+    public static final String SQL_CREATE_INDEX_SEMESTER =
+            "CREATE INDEX IF NOT EXISTS " + ScheduleEntry.INDEX_SEMESTER + " ON " + ScheduleEntry.TABLE_NAME +
+                    "(" + ScheduleEntry.COLUMN_SEMESTER_ID + ")";
 
     public static final String SQL_CREATE_HOLIDAYS =
             "CREATE TABLE " + HolidayEntry.TABLE_NAME + " (" +

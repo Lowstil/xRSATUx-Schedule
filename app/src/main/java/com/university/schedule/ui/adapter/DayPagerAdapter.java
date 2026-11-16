@@ -1,6 +1,7 @@
 package com.university.schedule.ui.adapter;
 
 import android.util.SparseArray;
+import android.view.HapticFeedbackConstants;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -12,6 +13,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.university.schedule.R;
+import com.university.schedule.logic.SemesterManager;
 import com.university.schedule.model.DaySchedule;
 import com.university.schedule.model.LessonNote;
 import com.university.schedule.model.NextLesson;
@@ -34,11 +36,18 @@ public class DayPagerAdapter extends RecyclerView.Adapter<DayPagerAdapter.PageVi
 
     public static final int WEEK_COUNT = 18;
     public static final int DAYS_PER_WEEK = 6;
-    public static final int TOTAL_PAGES = WEEK_COUNT * DAYS_PER_WEEK;
+    public static final int PAGES_PER_SEMESTER = WEEK_COUNT * DAYS_PER_WEEK;
+    public static final int TOTAL_PAGES = PAGES_PER_SEMESTER * 2;
+
+    public interface OnSemesterCheckListener {
+        void onCheckSemesterNow(String semesterId);
+    }
 
     private final SparseArray<PageViewHolder> boundHolders = new SparseArray<>();
-    private final SparseArray<WeekSchedule> weekCache = new SparseArray<>();
+    private final Map<String, WeekSchedule> weekCache = new HashMap<>();
     private final Map<String, Map<Integer, LessonNote>> notesByDate = new HashMap<>();
+    private boolean fallPublished = true;
+    private boolean springPublished = true;
     private ScheduleClock.State clockState;
     private ScheduleClock.LessonKey nextKey;
     private NextLesson nextLesson;
@@ -50,11 +59,19 @@ public class DayPagerAdapter extends RecyclerView.Adapter<DayPagerAdapter.PageVi
     private DayScheduleAdapter.OnLessonLongClickListener lessonLongClickListener;
     private DayScheduleAdapter.OnTeacherClickListener teacherClickListener;
     private DayScheduleAdapter.OnRoomClickListener roomClickListener;
+    private OnSemesterCheckListener semesterCheckListener;
     private int bottomInsetPx = 0;
+
+    public static String semesterOf(int position) {
+        int clamped = clampPosition(position);
+        return clamped < PAGES_PER_SEMESTER
+                ? SemesterManager.SEMESTER_FALL
+                : SemesterManager.SEMESTER_SPRING;
+    }
 
     public static int weekOf(int position) {
         int clamped = clampPosition(position);
-        return (clamped / DAYS_PER_WEEK) + 1;
+        return ((clamped / DAYS_PER_WEEK) % WEEK_COUNT) + 1;
     }
 
     public static int dayOf(int position) {
@@ -62,14 +79,22 @@ public class DayPagerAdapter extends RecyclerView.Adapter<DayPagerAdapter.PageVi
         return clamped % DAYS_PER_WEEK;
     }
 
-    public static int positionOf(int weekNumber, int dayIndex) {
+    public static int positionOf(String semId, int weekNumber, int dayIndex) {
         int w = Math.max(1, Math.min(WEEK_COUNT, weekNumber));
         int d = Math.max(0, Math.min(DAYS_PER_WEEK - 1, dayIndex));
-        return (w - 1) * DAYS_PER_WEEK + d;
+        int semOffset = SemesterManager.SEMESTER_SPRING.equals(semId) ? PAGES_PER_SEMESTER : 0;
+        return semOffset + (w - 1) * DAYS_PER_WEEK + d;
     }
 
     private static int clampPosition(int position) {
         return Math.max(0, Math.min(TOTAL_PAGES - 1, position));
+    }
+
+    private static String cacheKey(String semId, int weekNumber) {
+        String sem = SemesterManager.SEMESTER_SPRING.equals(semId)
+                ? SemesterManager.SEMESTER_SPRING
+                : SemesterManager.SEMESTER_FALL;
+        return sem + ":" + weekNumber;
     }
 
     public void setBottomInsetPx(int bottomInsetPx) {
@@ -80,20 +105,39 @@ public class DayPagerAdapter extends RecyclerView.Adapter<DayPagerAdapter.PageVi
         }
     }
 
-    public void setWeekSchedule(int weekNumber, WeekSchedule ws, Map<String, Map<Integer, LessonNote>> weekNotes) {
-        if (weekNumber < 1 || weekNumber > WEEK_COUNT) return;
-        boolean weekChanged = weekCache.get(weekNumber) != ws;
-        if (ws != null) {
-            weekCache.put(weekNumber, ws);
+    public void setSemesterPublished(String semId, boolean published) {
+        boolean isSpring = SemesterManager.SEMESTER_SPRING.equals(semId);
+        boolean changed = isSpring ? (springPublished != published) : (fallPublished != published);
+        if (isSpring) {
+            springPublished = published;
         } else {
-            weekCache.remove(weekNumber);
+            fallPublished = published;
+        }
+        if (changed) {
+            int offset = isSpring ? PAGES_PER_SEMESTER : 0;
+            notifyItemRangeChanged(offset, PAGES_PER_SEMESTER);
+        }
+    }
+
+    public boolean isSemesterPublished(String semId) {
+        return SemesterManager.SEMESTER_SPRING.equals(semId) ? springPublished : fallPublished;
+    }
+
+    public void setWeekSchedule(String semId, int weekNumber, WeekSchedule ws, Map<String, Map<Integer, LessonNote>> weekNotes) {
+        if (weekNumber < 1 || weekNumber > WEEK_COUNT) return;
+        String key = cacheKey(semId, weekNumber);
+        boolean weekChanged = weekCache.get(key) != ws;
+        if (ws != null) {
+            weekCache.put(key, ws);
+        } else {
+            weekCache.remove(key);
         }
         boolean notesChanged = weekNotes != null && !weekNotes.isEmpty();
         if (notesChanged) {
             this.notesByDate.putAll(weekNotes);
         }
         if (weekChanged || notesChanged) {
-            notifyItemRangeChanged((weekNumber - 1) * DAYS_PER_WEEK, DAYS_PER_WEEK);
+            notifyItemRangeChanged(positionOf(semId, weekNumber, 0), DAYS_PER_WEEK);
         }
     }
 
@@ -131,9 +175,14 @@ public class DayPagerAdapter extends RecyclerView.Adapter<DayPagerAdapter.PageVi
             int pos = boundHolders.keyAt(i);
             PageViewHolder h = boundHolders.valueAt(i);
             if (h == null) continue;
+            String semId = semesterOf(pos);
+            if (!isSemesterPublished(semId)) {
+                h.dayAdapter.updateClockOnly(null, null, null);
+                continue;
+            }
             int weekNumber = weekOf(pos);
             int dayIndex = dayOf(pos);
-            WeekSchedule ws = weekCache.get(weekNumber);
+            WeekSchedule ws = weekCache.get(cacheKey(semId, weekNumber));
             if (ws == null || ws.getDays() == null || dayIndex >= ws.getDays().size()) {
                 h.dayAdapter.updateClockOnly(null, null, null);
                 continue;
@@ -179,9 +228,13 @@ public class DayPagerAdapter extends RecyclerView.Adapter<DayPagerAdapter.PageVi
         this.roomClickListener = l;
     }
 
+    public void setOnSemesterCheckListener(OnSemesterCheckListener l) {
+        this.semesterCheckListener = l;
+    }
+
     public boolean canPageScrollUp(int position) {
         PageViewHolder h = boundHolders.get(position);
-        return h != null && h.recyclerView.canScrollVertically(-1);
+        return h != null && h.recyclerView.getVisibility() == View.VISIBLE && h.recyclerView.canScrollVertically(-1);
     }
 
     @Override
@@ -214,9 +267,20 @@ public class DayPagerAdapter extends RecyclerView.Adapter<DayPagerAdapter.PageVi
         dayAdapter.setOnTeacherClickListener(teacherClickListener);
         dayAdapter.setOnRoomClickListener(roomClickListener);
 
+        String semId = semesterOf(position);
         int weekNumber = weekOf(position);
         int dayIndex = dayOf(position);
-        WeekSchedule ws = weekCache.get(weekNumber);
+
+        if (!isSemesterPublished(semId)) {
+            dayAdapter.updateData(new ArrayList<>());
+            dayAdapter.setNotes(new HashMap<>());
+            dayAdapter.applyClock(null, null, null);
+            holder.showUnpublished(semId, semesterCheckListener);
+            return;
+        }
+
+        holder.hideUnpublished();
+        WeekSchedule ws = weekCache.get(cacheKey(semId, weekNumber));
 
         if (ws == null || ws.getDays() == null || dayIndex >= ws.getDays().size()) {
             dayAdapter.updateData(new ArrayList<>());
@@ -267,6 +331,8 @@ public class DayPagerAdapter extends RecyclerView.Adapter<DayPagerAdapter.PageVi
         final TextView tvEmpty;
         final LinearLayout nextLessonPanel;
         final TextView tvNextWhen, tvNextSubject, tvNextTeacherRoom;
+        final View cardPageUnpublished;
+        final TextView tvPageUnpublishedTitle, tvPageUnpublishedSubtitle, btnPageCheckSemesterNow;
         private final int baseBottomPad;
 
         PageViewHolder(@NonNull View v) {
@@ -278,6 +344,10 @@ public class DayPagerAdapter extends RecyclerView.Adapter<DayPagerAdapter.PageVi
             tvNextWhen = v.findViewById(R.id.tvPageNextWhen);
             tvNextSubject = v.findViewById(R.id.tvPageNextSubject);
             tvNextTeacherRoom = v.findViewById(R.id.tvPageNextTeacherRoom);
+            cardPageUnpublished = v.findViewById(R.id.cardPageUnpublished);
+            tvPageUnpublishedTitle = v.findViewById(R.id.tvPageUnpublishedTitle);
+            tvPageUnpublishedSubtitle = v.findViewById(R.id.tvPageUnpublishedSubtitle);
+            btnPageCheckSemesterNow = v.findViewById(R.id.btnPageCheckSemesterNow);
 
             baseBottomPad = recyclerView.getPaddingBottom();
             dayAdapter = new DayScheduleAdapter(new ArrayList<>());
@@ -294,7 +364,34 @@ public class DayPagerAdapter extends RecyclerView.Adapter<DayPagerAdapter.PageVi
             );
         }
 
+        void showUnpublished(String semId, OnSemesterCheckListener checkListener) {
+            recyclerView.setVisibility(View.GONE);
+            emptyContainer.setVisibility(View.GONE);
+            cardPageUnpublished.setVisibility(View.VISIBLE);
+            GlassSurfaceHelper.applyGlassCard(cardPageUnpublished, 24f, false);
+            GlassSurfaceHelper.applyGlassCard(btnPageCheckSemesterNow, 999f, true);
+
+            boolean isSpring = SemesterManager.SEMESTER_SPRING.equals(semId);
+            tvPageUnpublishedTitle.setText(isSpring
+                    ? "Расписание на весенний семестр ещё не опубликовано"
+                    : "Расписание на осенний семестр ещё не опубликовано");
+            tvPageUnpublishedSubtitle.setText(isSpring
+                    ? "Оно появится автоматически после 30 января, как только вуз выложит новый файл на сайте."
+                    : "Оно появится автоматически после 25 августа, как только вуз выложит новый файл на сайте.");
+            btnPageCheckSemesterNow.setOnClickListener(v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                if (checkListener != null) {
+                    checkListener.onCheckSemesterNow(semId);
+                }
+            });
+        }
+
+        void hideUnpublished() {
+            cardPageUnpublished.setVisibility(View.GONE);
+        }
+
         void showEmpty(String msg, NextLesson next) {
+            cardPageUnpublished.setVisibility(View.GONE);
             recyclerView.setVisibility(View.GONE);
             emptyContainer.setVisibility(View.VISIBLE);
             tvEmpty.setText(msg);

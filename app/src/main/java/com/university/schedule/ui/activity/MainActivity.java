@@ -44,6 +44,7 @@ import com.google.android.material.tabs.TabLayout;
 import com.university.schedule.R;
 import com.university.schedule.data.ScheduleRepository;
 import com.university.schedule.data.db.NoteDao;
+import com.university.schedule.logic.SemesterManager;
 import com.university.schedule.logic.WeekCalculator;
 import com.university.schedule.model.DaySchedule;
 import com.university.schedule.model.GroupOrTeacher;
@@ -114,6 +115,7 @@ public class MainActivity extends AppCompatActivity {
     private View headerContainer;
     private View toolbarTitleArea;
     private View weekSwitcherCard;
+    private TextView semesterToastPill;
     private View bottomDock;
     private View dockPairs;
     private View dockAttendance;
@@ -135,6 +137,7 @@ public class MainActivity extends AppCompatActivity {
     private WeekCalculator calc;
     private WeekScheduleController weekController;
     private WeekSchedule currentWeek;
+    private String activeSemesterId;
     private String selType, selName;
     private int weekNum, dayIndex;
     private boolean suppressTabCallback;
@@ -142,6 +145,20 @@ public class MainActivity extends AppCompatActivity {
 
     private final ExecutorService ex = Executors.newSingleThreadExecutor();
     private final Handler clockHandler = new Handler(Looper.getMainLooper());
+    private final Handler semesterToastHandler = new Handler(Looper.getMainLooper());
+    private final Runnable hideSemesterToastRunnable = () -> {
+        if (semesterToastPill == null || isFinishing() || isDestroyed()) return;
+        semesterToastPill.animate()
+                .alpha(0f)
+                .translationY(-dpToPx(10))
+                .setDuration(220)
+                .withEndAction(() -> {
+                    if (semesterToastPill != null) {
+                        semesterToastPill.setVisibility(View.GONE);
+                    }
+                })
+                .start();
+    };
     private final Runnable clockTick = new Runnable() {
         @Override
         public void run() {
@@ -163,17 +180,23 @@ public class MainActivity extends AppCompatActivity {
         }
 
         repo = ScheduleRepository.getInstance(this);
-        calc = repo.getWeekCalculator();
+        activeSemesterId = repo.getActiveSemesterId();
+        if (activeSemesterId == null) {
+            activeSemesterId = SemesterManager.SEMESTER_FALL;
+        }
+        calc = repo.getWeekCalculator(activeSemesterId);
         weekController = new WeekScheduleController(repo, ex);
+        weekController.setSemesterId(activeSemesterId);
         noteDao = new NoteDao(this);
         selType = repo.getSelectionType();
         selName = repo.getSelectionName();
-        initWeekForDate(DateUtils.todayMoscow());
+        initWeekForSemester(activeSemesterId, DateUtils.todayMoscow());
 
         ambientBackdrop = findViewById(R.id.ambientBackdrop);
         headerContainer = findViewById(R.id.headerContainer);
         toolbarTitleArea = findViewById(R.id.toolbarTitleArea);
         weekSwitcherCard = findViewById(R.id.weekSwitcherCard);
+        semesterToastPill = findViewById(R.id.semesterToastPill);
         bottomDock = findViewById(R.id.bottomDock);
         dockPairs = findViewById(R.id.dockPairs);
         dockAttendance = findViewById(R.id.dockAttendance);
@@ -289,6 +312,8 @@ public class MainActivity extends AppCompatActivity {
         );
 
         pagerAdapter = new DayPagerAdapter();
+        pagerAdapter.setSemesterPublished(SemesterManager.SEMESTER_FALL, repo.isSemesterPublished(SemesterManager.SEMESTER_FALL));
+        pagerAdapter.setSemesterPublished(SemesterManager.SEMESTER_SPRING, repo.isSemesterPublished(SemesterManager.SEMESTER_SPRING));
         pagerAdapter.setExcludedSubjects(excludedSubjectsManager.getExcludedSubjects(selName));
         pagerAdapter.setSkippedLessonsManager(skippedLessonsManager);
         pagerAdapter.setAttendanceManager(attendanceManager);
@@ -298,20 +323,24 @@ public class MainActivity extends AppCompatActivity {
                 RoomTeacherFinderDialog.showForTeacher(this, teacherName));
         pagerAdapter.setOnRoomClickListener(rawRoom ->
                 BuildingInfoDialog.show(this, rawRoom));
+        pagerAdapter.setOnSemesterCheckListener(semId -> {
+            swipeRefresh.setRefreshing(true);
+            refresh();
+        });
 
         viewPager.setAdapter(pagerAdapter);
         viewPager.setOffscreenPageLimit(2);
-        viewPager.setCurrentItem(DayPagerAdapter.positionOf(weekNum, dayIndex), false);
+        viewPager.setCurrentItem(DayPagerAdapter.positionOf(activeSemesterId, weekNum, dayIndex), false);
 
         buildDayTabs();
-        selectPage(weekNum, dayIndex, false);
+        selectPage(activeSemesterId, weekNum, dayIndex, false);
 
         tabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override
             public void onTabSelected(TabLayout.Tab t) {
                 if (suppressTabCallback) return;
                 dayIndex = t.getPosition();
-                viewPager.setCurrentItem(DayPagerAdapter.positionOf(weekNum, dayIndex), true);
+                viewPager.setCurrentItem(DayPagerAdapter.positionOf(activeSemesterId, weekNum, dayIndex), true);
                 updateTabSelectionVisuals();
             }
 
@@ -326,6 +355,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onPageSelected(int position) {
                 viewPager.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+                String newSem = DayPagerAdapter.semesterOf(position);
                 int newWeek = DayPagerAdapter.weekOf(position);
                 int newDay = DayPagerAdapter.dayOf(position);
                 dayIndex = newDay;
@@ -339,9 +369,14 @@ public class MainActivity extends AppCompatActivity {
                 }
                 updateTabSelectionVisuals();
 
-                if (newWeek != weekNum) {
+                boolean semChanged = !newSem.equals(activeSemesterId);
+                if (semChanged) {
+                    switchActiveSemester(newSem, true);
+                }
+
+                if (semChanged || newWeek != weekNum) {
                     weekNum = newWeek;
-                    currentWeek = weekController.getCachedWeek(weekNum);
+                    currentWeek = weekController.getCachedWeek(weekNum, activeSemesterId);
                     updateWeekHeaderUi();
                     updateDayTabsForWeek();
                     loadWeek();
@@ -366,10 +401,19 @@ public class MainActivity extends AppCompatActivity {
             if (weekNum > 1) {
                 weekNum--;
                 dayIndex = 0;
-                currentWeek = weekController.getCachedWeek(weekNum);
+                currentWeek = weekController.getCachedWeek(weekNum, activeSemesterId);
                 updateWeekHeaderUi();
                 updateDayTabsForWeek();
-                selectPage(weekNum, 0, true);
+                selectPage(activeSemesterId, weekNum, 0, true);
+                loadWeek();
+            } else if (SemesterManager.SEMESTER_SPRING.equals(activeSemesterId)) {
+                switchActiveSemester(SemesterManager.SEMESTER_FALL, true);
+                weekNum = DayPagerAdapter.WEEK_COUNT;
+                dayIndex = 0;
+                currentWeek = weekController.getCachedWeek(weekNum, activeSemesterId);
+                updateWeekHeaderUi();
+                updateDayTabsForWeek();
+                selectPage(activeSemesterId, weekNum, 0, true);
                 loadWeek();
             }
         });
@@ -377,10 +421,19 @@ public class MainActivity extends AppCompatActivity {
             if (weekNum < DayPagerAdapter.WEEK_COUNT) {
                 weekNum++;
                 dayIndex = 0;
-                currentWeek = weekController.getCachedWeek(weekNum);
+                currentWeek = weekController.getCachedWeek(weekNum, activeSemesterId);
                 updateWeekHeaderUi();
                 updateDayTabsForWeek();
-                selectPage(weekNum, 0, true);
+                selectPage(activeSemesterId, weekNum, 0, true);
+                loadWeek();
+            } else if (SemesterManager.SEMESTER_FALL.equals(activeSemesterId)) {
+                switchActiveSemester(SemesterManager.SEMESTER_SPRING, true);
+                weekNum = 1;
+                dayIndex = 0;
+                currentWeek = weekController.getCachedWeek(weekNum, activeSemesterId);
+                updateWeekHeaderUi();
+                updateDayTabsForWeek();
+                selectPage(activeSemesterId, weekNum, 0, true);
                 loadWeek();
             }
         });
@@ -419,6 +472,7 @@ public class MainActivity extends AppCompatActivity {
         GlassSurfaceHelper.applyGlassCard(toolbarTitleArea, 18f, false);
         GlassSurfaceHelper.applyGlassCard(tvTodayDate, 999f, false);
         GlassSurfaceHelper.applyGlassCard(weekSwitcherCard, 20f, false);
+        GlassSurfaceHelper.applyGlassCard(semesterToastPill, 999f, true);
         GlassSurfaceHelper.applyGlassCard(staleBanner, 16f, true);
         GlassSurfaceHelper.applyGlassCard(bottomDock, 999f, false);
         GlassSurfaceHelper.applyGlassCard(dockPairs, 999f, true);
@@ -453,13 +507,54 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void jumpToToday() {
-        initWeekForDate(DateUtils.todayMoscow());
-        currentWeek = weekController.getCachedWeek(weekNum);
+        LocalDate today = DateUtils.todayMoscow();
+        String windowSem = SemesterManager.getCurrentWindowSemester(today);
+        boolean semChanged = !windowSem.equals(activeSemesterId);
+        if (semChanged) {
+            switchActiveSemester(windowSem, true);
+        }
+        initWeekForSemester(activeSemesterId, today);
+        currentWeek = weekController.getCachedWeek(weekNum, activeSemesterId);
         updateWeekHeaderUi();
         updateDayTabsForWeek();
-        selectPage(weekNum, dayIndex, true);
+        selectPage(activeSemesterId, weekNum, dayIndex, !semChanged);
         loadWeek();
         updateClock();
+    }
+
+    private void switchActiveSemester(@NonNull String semesterId, boolean showToast) {
+        if (semesterId.equals(activeSemesterId)) return;
+        activeSemesterId = semesterId;
+        repo.setActiveSemesterId(activeSemesterId);
+        calc = repo.getWeekCalculator(activeSemesterId);
+        weekController.setSemesterId(activeSemesterId);
+        if (showToast) {
+            showSemesterToast(activeSemesterId);
+        }
+    }
+
+    private void showSemesterToast(@NonNull String semesterId) {
+        if (semesterToastPill == null || isFinishing() || isDestroyed()) return;
+        semesterToastHandler.removeCallbacks(hideSemesterToastRunnable);
+        semesterToastPill.animate().cancel();
+
+        boolean isSpring = SemesterManager.SEMESTER_SPRING.equals(semesterId);
+        String text = isSpring ? "🌸 Весенний семестр" : "🍂 Осенний семестр";
+        if (!repo.isSemesterPublished(semesterId)) {
+            text += " · нет расписания";
+        }
+        semesterToastPill.setText(text);
+        GlassSurfaceHelper.applyGlassCard(semesterToastPill, 999f, true);
+
+        semesterToastPill.setAlpha(0f);
+        semesterToastPill.setTranslationY(-dpToPx(12));
+        semesterToastPill.setVisibility(View.VISIBLE);
+        semesterToastPill.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setDuration(220)
+                .start();
+        semesterToastHandler.postDelayed(hideSemesterToastRunnable, 2500);
     }
 
     private void openAttendanceDialog() {
@@ -1016,6 +1111,17 @@ public class MainActivity extends AppCompatActivity {
         LiveLessonService.syncNow(this);
     }
 
+    private void initWeekForSemester(@NonNull String semesterId, LocalDate today) {
+        String windowSem = SemesterManager.getCurrentWindowSemester(today);
+        if (semesterId.equals(windowSem)) {
+            initWeekForDate(today);
+        } else {
+            weekNum = 1;
+            dayIndex = 0;
+            builtForDate = today;
+        }
+    }
+
     private void initWeekForDate(LocalDate today) {
         LocalDate target = DateUtils.initialScheduleDate(today);
         weekNum = calc.getWeekNumber(target);
@@ -1029,11 +1135,11 @@ public class MainActivity extends AppCompatActivity {
         builtForDate = today;
     }
 
-    private void selectPage(int targetWeek, int targetDay, boolean smoothScroll) {
+    private void selectPage(@NonNull String semesterId, int targetWeek, int targetDay, boolean smoothScroll) {
         if (targetWeek < 1) targetWeek = 1;
         if (targetWeek > DayPagerAdapter.WEEK_COUNT) targetWeek = DayPagerAdapter.WEEK_COUNT;
         if (targetDay < 0 || targetDay >= DayPagerAdapter.DAYS_PER_WEEK) targetDay = 0;
-        final int targetPos = DayPagerAdapter.positionOf(targetWeek, targetDay);
+        final int targetPos = DayPagerAdapter.positionOf(semesterId, targetWeek, targetDay);
         final int finalDay = targetDay;
         if (viewPager != null && viewPager.getCurrentItem() != targetPos) {
             viewPager.setCurrentItem(targetPos, smoothScroll);
@@ -1060,13 +1166,23 @@ public class MainActivity extends AppCompatActivity {
         updateTabSelectionVisuals();
         updateDockMoreBadge();
         LocalDate today = DateUtils.todayMoscow();
-        if (builtForDate == null || !builtForDate.equals(today)) {
-            calc = repo.getWeekCalculator();
-            initWeekForDate(today);
+        String repoSem = repo.getActiveSemesterId();
+        if (repoSem == null) repoSem = SemesterManager.SEMESTER_FALL;
+        boolean semChanged = !repoSem.equals(activeSemesterId);
+        activeSemesterId = repoSem;
+        calc = repo.getWeekCalculator(activeSemesterId);
+        weekController.setSemesterId(activeSemesterId);
+        pagerAdapter.setSemesterPublished(SemesterManager.SEMESTER_FALL, repo.isSemesterPublished(SemesterManager.SEMESTER_FALL));
+        pagerAdapter.setSemesterPublished(SemesterManager.SEMESTER_SPRING, repo.isSemesterPublished(SemesterManager.SEMESTER_SPRING));
+        if (builtForDate == null || !builtForDate.equals(today) || semChanged) {
+            initWeekForSemester(activeSemesterId, today);
             tvTodayDate.setText(DateUtils.formatDisplayDateShort(today));
             clearWeekCache();
-            selectPage(weekNum, dayIndex, false);
+            selectPage(activeSemesterId, weekNum, dayIndex, false);
             loadWeek();
+        } else {
+            updateWeekHeaderUi();
+            updateDayTabsForWeek();
         }
         updateFavoritesBar();
         if (excludedSubjectsManager != null) {
@@ -1132,8 +1248,8 @@ public class MainActivity extends AppCompatActivity {
     private void updateDayTabsForWeek() {
         LocalDate today = DateUtils.todayMoscow();
         List<DaySchedule> days = (currentWeek != null) ? currentWeek.getDays() : null;
-        LocalDate mon = (days != null && !days.isEmpty()) ? days.get(0).getDate() : null;
-        LocalDate sat = (days != null && days.size() >= 6) ? days.get(5).getDate() : null;
+        LocalDate mon = (days != null && !days.isEmpty()) ? days.get(0).getDate() : calc.getMondayOfWeek(weekNum);
+        LocalDate sat = (days != null && days.size() >= 6) ? days.get(5).getDate() : calc.getSaturdayOfWeek(weekNum);
         tvMonthLabel.setText(DateUtils.formatMonthRangeRu(mon, sat));
 
         for (int i = 0; i < 6; i++) {
@@ -1186,13 +1302,16 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateWeekHeaderUi() {
+        String semLabel = SemesterManager.SEMESTER_SPRING.equals(activeSemesterId) ? "Весна" : "Осень";
         String label = (weekNum % 2 == 0) ? "Чётная" : "Нечётная";
         LocalDate mon = calc.getMondayOfWeek(weekNum);
         LocalDate sat = calc.getSaturdayOfWeek(weekNum);
         String range = (mon != null && sat != null) ? DateUtils.formatDisplayDate(mon) + " – " + DateUtils.formatDisplayDate(sat) : "";
-        tvWeekInfo.setText("Неделя " + weekNum + " (" + label + ") · " + range);
-        btnPrev.setAlpha(weekNum > 1 ? 1f : 0.3f);
-        btnNext.setAlpha(weekNum < DayPagerAdapter.WEEK_COUNT ? 1f : 0.3f);
+        tvWeekInfo.setText(semLabel + " · Неделя " + weekNum + " (" + label + ")  " + range);
+        boolean isFall = SemesterManager.SEMESTER_FALL.equals(activeSemesterId);
+        boolean isSpring = SemesterManager.SEMESTER_SPRING.equals(activeSemesterId);
+        btnPrev.setAlpha(!(isFall && weekNum == 1) ? 1f : 0.3f);
+        btnNext.setAlpha(!(isSpring && weekNum == DayPagerAdapter.WEEK_COUNT) ? 1f : 0.3f);
     }
 
     private void clearWeekCache() {
@@ -1204,11 +1323,24 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadWeek() {
+        boolean fallPub = repo.isSemesterPublished(SemesterManager.SEMESTER_FALL);
+        boolean springPub = repo.isSemesterPublished(SemesterManager.SEMESTER_SPRING);
+        pagerAdapter.setSemesterPublished(SemesterManager.SEMESTER_FALL, fallPub);
+        pagerAdapter.setSemesterPublished(SemesterManager.SEMESTER_SPRING, springPub);
         updateWeekHeaderUi();
 
-        boolean cachedHit = weekController.loadWeek(weekNum, selType, selName, (loadedWeek, ws, notesMap, isTarget) -> {
-            pagerAdapter.setWeekSchedule(loadedWeek, ws, notesMap);
-            if (loadedWeek == weekNum) {
+        if (!repo.isSemesterPublished(activeSemesterId)) {
+            progressBar.setVisibility(View.GONE);
+            currentWeek = null;
+            updateDayTabsForWeek();
+            prefetchCrossSemesterBoundary();
+            return;
+        }
+
+        final String targetSem = activeSemesterId;
+        boolean cachedHit = weekController.loadWeek(weekNum, targetSem, selType, selName, (loadedWeek, ws, notesMap, isTarget) -> {
+            pagerAdapter.setWeekSchedule(targetSem, loadedWeek, ws, notesMap);
+            if (loadedWeek == weekNum && targetSem.equals(activeSemesterId)) {
                 currentWeek = ws;
                 progressBar.setVisibility(View.GONE);
                 updateDayTabsForWeek();
@@ -1218,13 +1350,54 @@ public class MainActivity extends AppCompatActivity {
         });
 
         if (cachedHit) {
-            currentWeek = weekController.getCachedWeek(weekNum);
+            currentWeek = weekController.getCachedWeek(weekNum, targetSem);
             progressBar.setVisibility(View.GONE);
             updateDayTabsForWeek();
             updateClock();
         } else {
             progressBar.setVisibility(View.VISIBLE);
         }
+        prefetchCrossSemesterBoundary();
+    }
+
+    private void prefetchCrossSemesterBoundary() {
+        final String boundarySem;
+        final int boundaryWeek;
+        if (SemesterManager.SEMESTER_SPRING.equals(activeSemesterId) && weekNum == 1) {
+            boundarySem = SemesterManager.SEMESTER_FALL;
+            boundaryWeek = DayPagerAdapter.WEEK_COUNT;
+        } else if (SemesterManager.SEMESTER_FALL.equals(activeSemesterId) && weekNum == DayPagerAdapter.WEEK_COUNT) {
+            boundarySem = SemesterManager.SEMESTER_SPRING;
+            boundaryWeek = 1;
+        } else {
+            return;
+        }
+        if (!repo.isSemesterPublished(boundarySem)) return;
+        if (weekController.getCachedWeek(boundaryWeek, boundarySem) != null) return;
+
+        final String targetType = selType;
+        final String targetName = selName;
+        ex.execute(() -> {
+            WeekSchedule ws = GroupOrTeacher.TYPE_GROUP.equals(targetType)
+                    ? repo.getWeekScheduleForGroup(targetName, boundaryWeek, boundarySem)
+                    : repo.getWeekScheduleForTeacher(targetName, boundaryWeek, boundarySem);
+            if (ws == null) return;
+            java.util.Map<String, java.util.Map<Integer, LessonNote>> notesMap = new java.util.HashMap<>();
+            if (ws.getDays() != null) {
+                for (DaySchedule d : ws.getDays()) {
+                    if (d.getDate() != null) {
+                        String iso = d.getDate().toString();
+                        notesMap.put(iso, repo.getNotesForDate(iso));
+                    }
+                }
+            }
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                if (targetName != null && !targetName.equals(selName)) return;
+                if (targetType != null && !targetType.equals(selType)) return;
+                pagerAdapter.setWeekSchedule(boundarySem, boundaryWeek, ws, notesMap);
+            });
+        });
     }
 
     private void updateClock() {
@@ -1264,8 +1437,19 @@ public class MainActivity extends AppCompatActivity {
                     if (isFinishing() || isDestroyed()) return;
                     swipeRefresh.setRefreshing(false);
                     repo.refreshLogic();
-                    calc = repo.getWeekCalculator();
+                    activeSemesterId = repo.getActiveSemesterId();
+                    if (activeSemesterId == null) {
+                        activeSemesterId = SemesterManager.SEMESTER_FALL;
+                    }
+                    calc = repo.getWeekCalculator(activeSemesterId);
+                    weekController.setSemesterId(activeSemesterId);
+                    pagerAdapter.setSemesterPublished(SemesterManager.SEMESTER_FALL, repo.isSemesterPublished(SemesterManager.SEMESTER_FALL));
+                    pagerAdapter.setSemesterPublished(SemesterManager.SEMESTER_SPRING, repo.isSemesterPublished(SemesterManager.SEMESTER_SPRING));
                     clearWeekCache();
+                    if (repo.isSemesterPublished(activeSemesterId)) {
+                        initWeekForSemester(activeSemesterId, DateUtils.todayMoscow());
+                        selectPage(activeSemesterId, weekNum, dayIndex, false);
+                    }
                     loadWeek();
                     updateLastUpdatedBanner();
                     updateFavoritesBar();
@@ -1374,6 +1558,10 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         clockHandler.removeCallbacks(clockTick);
+        semesterToastHandler.removeCallbacks(hideSemesterToastRunnable);
+        if (semesterToastPill != null) {
+            semesterToastPill.animate().cancel();
+        }
         if (weekController != null) {
             weekController.destroy();
         }

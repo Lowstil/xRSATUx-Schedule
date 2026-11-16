@@ -35,7 +35,7 @@ public class ScheduleDao {
             db.delete(ScheduleEntry.TABLE_NAME, null, null);
             if (items != null) {
                 for (ScheduleItem item : items) {
-                    db.insert(ScheduleEntry.TABLE_NAME, null, toContentValues(item));
+                    db.insert(ScheduleEntry.TABLE_NAME, null, toContentValues(item, "fall"));
                 }
             }
             db.setTransactionSuccessful();
@@ -43,6 +43,41 @@ public class ScheduleDao {
         } finally {
             db.endTransaction();
         }
+    }
+
+    /** Заменяет расписание только для указанного семестра ("fall" или "spring"). */
+    public void replaceForSemester(String semesterId, List<ScheduleItem> items) {
+        String sem = semesterId != null ? semesterId : "fall";
+        SQLiteDatabase db = dbHelper.getWritableDatabase();
+        db.beginTransaction();
+        try {
+            db.delete(ScheduleEntry.TABLE_NAME,
+                    ScheduleEntry.COLUMN_SEMESTER_ID + " = ?",
+                    new String[]{sem});
+            if (items != null) {
+                for (ScheduleItem item : items) {
+                    db.insert(ScheduleEntry.TABLE_NAME, null, toContentValues(item, sem));
+                }
+            }
+            db.setTransactionSuccessful();
+            Log.d(TAG, "Расписание заменено для семестра " + sem + ", записей: " + (items == null ? 0 : items.size()));
+        } finally {
+            db.endTransaction();
+        }
+    }
+
+    public boolean hasDataForSemester(String semesterId) {
+        if (semesterId == null) return false;
+        SQLiteDatabase db = dbHelper.getReadableDatabase();
+        try (Cursor cursor = db.rawQuery(
+                "SELECT COUNT(*) FROM " + ScheduleEntry.TABLE_NAME +
+                        " WHERE " + ScheduleEntry.COLUMN_SEMESTER_ID + " = ?",
+                new String[]{semesterId})) {
+            if (cursor.moveToFirst()) {
+                return cursor.getInt(0) > 0;
+            }
+        }
+        return false;
     }
 
     public void clearAll() {
@@ -61,6 +96,17 @@ public class ScheduleDao {
         return query(selection, args);
     }
 
+    /** Строки листа "группы" для конкретной группы, типа недели и семестра. */
+    public List<ScheduleItem> getScheduleForGroup(String groupName, String weekType, String semesterId) {
+        if (groupName == null || weekType == null || semesterId == null) return new ArrayList<>();
+        String selection = ScheduleEntry.COLUMN_GROUP_NAME + " = ? AND " +
+                ScheduleEntry.COLUMN_SOURCE + " = ? AND " +
+                ScheduleEntry.COLUMN_WEEK_TYPE + " = ? AND " +
+                ScheduleEntry.COLUMN_SEMESTER_ID + " = ?";
+        String[] args = {groupName, SOURCE_GROUP, weekType, semesterId};
+        return query(selection, args);
+    }
+
     /** Строки листа "преподаватели" для конкретного преподавателя и типа недели. */
     public List<ScheduleItem> getScheduleForTeacher(String teacherName, String weekType) {
         if (teacherName == null || weekType == null) return new ArrayList<>();
@@ -68,6 +114,17 @@ public class ScheduleDao {
                 ScheduleEntry.COLUMN_SOURCE + " = ? AND " +
                 ScheduleEntry.COLUMN_WEEK_TYPE + " = ?";
         String[] args = {teacherName, SOURCE_TEACHER, weekType};
+        return query(selection, args);
+    }
+
+    /** Строки листа "преподаватели" для конкретного преподавателя, типа недели и семестра. */
+    public List<ScheduleItem> getScheduleForTeacher(String teacherName, String weekType, String semesterId) {
+        if (teacherName == null || weekType == null || semesterId == null) return new ArrayList<>();
+        String selection = ScheduleEntry.COLUMN_TEACHER_NAME + " = ? AND " +
+                ScheduleEntry.COLUMN_SOURCE + " = ? AND " +
+                ScheduleEntry.COLUMN_WEEK_TYPE + " = ? AND " +
+                ScheduleEntry.COLUMN_SEMESTER_ID + " = ?";
+        String[] args = {teacherName, SOURCE_TEACHER, weekType, semesterId};
         return query(selection, args);
     }
 
@@ -211,7 +268,7 @@ public class ScheduleDao {
         return result;
     }
 
-    private ContentValues toContentValues(ScheduleItem item) {
+    private ContentValues toContentValues(ScheduleItem item, String semesterId) {
         ContentValues v = new ContentValues();
         v.put(ScheduleEntry.COLUMN_WEEK_TYPE, item.getWeekType());
         v.put(ScheduleEntry.COLUMN_DAY_OF_WEEK, item.getDayOfWeek());
@@ -223,6 +280,7 @@ public class ScheduleDao {
         v.put(ScheduleEntry.COLUMN_ROOM, item.getRoom());
         v.put(ScheduleEntry.COLUMN_WEEK_SPEC, item.getWeekSpec());
         v.put(ScheduleEntry.COLUMN_SOURCE, item.getSource());
+        v.put(ScheduleEntry.COLUMN_SEMESTER_ID, semesterId != null ? semesterId : "fall");
         return v;
     }
 
