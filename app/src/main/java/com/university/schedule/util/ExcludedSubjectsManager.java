@@ -20,7 +20,7 @@ public class ExcludedSubjectsManager {
         this.prefs = context.getApplicationContext().getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE);
     }
 
-    public Set<String> getExcludedSubjects(String groupName) {
+    public synchronized Set<String> getExcludedSubjects(String groupName) {
         if (groupName == null || groupName.trim().isEmpty()) {
             return Collections.emptySet();
         }
@@ -28,13 +28,13 @@ public class ExcludedSubjectsManager {
         return set != null ? new HashSet<>(set) : new HashSet<>();
     }
 
-    public boolean isExcluded(String groupName, String subjectName) {
+    public synchronized boolean isExcluded(String groupName, String subjectName) {
         if (groupName == null || subjectName == null) return false;
         Set<String> set = prefs.getStringSet(PREF_PREFIX + groupName.trim(), null);
         return set != null && set.contains(subjectName.trim());
     }
 
-    public void setExcluded(String groupName, String subjectName, boolean excluded) {
+    public synchronized void setExcluded(String groupName, String subjectName, boolean excluded) {
         if (groupName == null || subjectName == null) return;
         Set<String> set = getExcludedSubjects(groupName);
         if (excluded) {
@@ -45,8 +45,8 @@ public class ExcludedSubjectsManager {
         prefs.edit().putStringSet(PREF_PREFIX + groupName.trim(), set).apply();
     }
 
-    public void setExcludedSubjects(String groupName, Set<String> subjects) {
+    public synchronized void setExcludedSubjects(String groupName, Set<String> subjects) {
         if (groupName == null || groupName.trim().isEmpty()) return;
-        prefs.edit().putStringSet(PREF_PREFIX + groupName.trim(), subjects != null ? subjects : Collections.emptySet()).apply();
+        prefs.edit().putStringSet(PREF_PREFIX + groupName.trim(), subjects != null ? new HashSet<>(subjects) : Collections.emptySet()).apply();
     }
 }

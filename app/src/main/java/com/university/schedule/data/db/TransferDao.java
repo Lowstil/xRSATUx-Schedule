@@ -54,12 +54,14 @@ public class TransferDao {
 
     /** Все переносы/замены на конкретную календарную дату (все виды kind). */
     public List<TransferItem> getForDate(String isoDate) {
+        if (isoDate == null) return new ArrayList<>();
         String selection = TransferEntry.COLUMN_DATE + " = ?";
         return query(selection, new String[]{isoDate});
     }
 
     /** Переносы за диапазон дат включительно — удобно грузить сразу на всю отображаемую неделю. */
     public List<TransferItem> getForDateRange(String isoDateFrom, String isoDateTo) {
+        if (isoDateFrom == null || isoDateTo == null) return new ArrayList<>();
         String selection = TransferEntry.COLUMN_DATE + " BETWEEN ? AND ?";
         return query(selection, new String[]{isoDateFrom, isoDateTo});
     }
@@ -74,6 +76,11 @@ public class TransferDao {
 
     private List<TransferItem> query(String selection, String[] args) {
         List<TransferItem> result = new ArrayList<>();
+        if (args != null) {
+            for (String arg : args) {
+                if (arg == null) return result;
+            }
+        }
         SQLiteDatabase db = dbHelper.getReadableDatabase();
         try (Cursor cursor = db.query(
                 TransferEntry.TABLE_NAME, null, selection, args, null, null,

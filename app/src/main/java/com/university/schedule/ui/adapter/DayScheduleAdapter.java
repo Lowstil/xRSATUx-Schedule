@@ -40,7 +40,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 public class DayScheduleAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
@@ -183,6 +185,33 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         notifyDataSetChanged();
     }
 
+    public void updateClockOnly(LocalDate date, ScheduleClock.State state, ScheduleClock.LessonKey next) {
+        ScheduleClock.LessonKey newCurrent = (state != null) ? state.current : null;
+        boolean dateChanged = !Objects.equals(this.dayDate, date);
+        boolean isToday = date != null && date.equals(DateUtils.todayMoscow());
+        boolean nextAffectsThisDay = (this.nextKey != null && Objects.equals(this.nextKey.date, date))
+                || (next != null && Objects.equals(next.date, date));
+        boolean currentAffectsThisDay = (this.currentKey != null && Objects.equals(this.currentKey.date, date))
+                || (newCurrent != null && Objects.equals(newCurrent.date, date));
+        boolean currentChanged = !sameKey(this.currentKey, newCurrent);
+        boolean nextChanged = !sameKey(this.nextKey, next);
+
+        this.dayDate = date;
+        this.clockState = state;
+        this.currentKey = newCurrent;
+        this.nextKey = next;
+
+        if (dateChanged || isToday || (nextAffectsThisDay && nextChanged) || (currentAffectsThisDay && currentChanged)) {
+            notifyDataSetChanged();
+        }
+    }
+
+    private static boolean sameKey(ScheduleClock.LessonKey a, ScheduleClock.LessonKey b) {
+        if (a == b) return true;
+        if (a == null || b == null) return false;
+        return a.dayOfWeek == b.dayOfWeek && a.lesson == b.lesson && Objects.equals(a.date, b.date);
+    }
+
     private boolean isLessonActive(ScheduleItem it) {
         if (it == null || it.isCancelled()) return false;
         String subj = it.getSubjectName();
@@ -238,7 +267,7 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     }
 
     private boolean matchesKey(ScheduleClock.LessonKey key, ScheduleItem it) {
-        return key != null && dayDate != null
+        return key != null && key.date != null && dayDate != null
                 && key.date.equals(dayDate)
                 && key.lesson == it.getLessonNumber();
     }
@@ -311,6 +340,16 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         }
 
         h.tvSubject.setText(it.getSubjectName());
+        if (h.tvCustomBadge != null) {
+            if (it.isCustom()) {
+                int customColor = dark ? 0xFFA78BFA : 0xFF7C3AED;
+                h.tvCustomBadge.setVisibility(View.VISIBLE);
+                h.tvCustomBadge.setBackground(tintedRound(ctx, customColor, boxAlpha, 8));
+                h.tvCustomBadge.setTextColor(customColor);
+            } else {
+                h.tvCustomBadge.setVisibility(View.GONE);
+            }
+        }
         String code = shortType(it.getLessonType());
         int tc = typeColor(it.getLessonType(), dark);
         h.tvLessonType.setText(code);
@@ -568,12 +607,7 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
             isNext = matchesKey(nextKey, it);
         }
 
-        Object animTag = h.indicator.getTag();
-        if (animTag instanceof ValueAnimator) {
-            ((ValueAnimator) animTag).cancel();
-            h.indicator.setTag(null);
-        }
-        h.indicator.animate().cancel();
+        cancelIndicatorAnim(h);
 
         // Apply Liquid Glass Card surface + state-aware specular border + glow
         GlassSurfaceHelper.applyLessonStateGlass(h.cardView, 22f, isCurrent ? 1 : (isNext ? 2 : 0));
@@ -591,13 +625,15 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
             if (h.tvLiveBadge != null) {
                 h.tvLiveBadge.setVisibility(View.VISIBLE);
                 h.tvLiveBadge.setText("LIVE");
-                h.tvLiveBadge.setTextColor(Color.WHITE);
+                h.tvLiveBadge.setTextColor(dark ? 0xFF0B1220 : Color.WHITE);
                 h.tvLiveBadge.setBackground(tintedRound(ctx, liveAccent, 0.92f, 999));
             }
 
             h.tvState.setText(lessonProg.statusText);
             h.tvState.setTextColor(liveAccent);
-            h.indicator.getBackground().mutate().setTint(liveAccent);
+            if (h.indicator.getBackground() != null) {
+                h.indicator.getBackground().mutate().setTint(liveAccent);
+            }
 
             h.progressSegmentContainer.setVisibility(View.VISIBLE);
             h.progressPart1.setMax(lessonProg.part1Max);
@@ -646,7 +682,9 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
 
             h.indicator.setVisibility(View.VISIBLE);
             h.indicator.setAlpha(1f);
-            h.indicator.getBackground().mutate().setTint(nextAccent);
+            if (h.indicator.getBackground() != null) {
+                h.indicator.getBackground().mutate().setTint(nextAccent);
+            }
         } else {
             h.stateRow.setVisibility(View.GONE);
             if (h.tvLiveBadge != null) {
@@ -673,18 +711,41 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         });
     }
 
+    private void cancelIndicatorAnim(LessonViewHolder lh) {
+        if (lh == null || lh.indicator == null) return;
+        Object tag = lh.indicator.getTag();
+        if (tag instanceof ValueAnimator) {
+            ((ValueAnimator) tag).cancel();
+            lh.indicator.setTag(null);
+        }
+        lh.indicator.animate().cancel();
+    }
+
     @Override
     public void onViewRecycled(@NonNull RecyclerView.ViewHolder holder) {
         if (holder instanceof LessonViewHolder) {
-            LessonViewHolder lh = (LessonViewHolder) holder;
-            Object tag = lh.indicator.getTag();
-            if (tag instanceof ValueAnimator) {
-                ((ValueAnimator) tag).cancel();
-                lh.indicator.setTag(null);
-            }
-            lh.indicator.animate().cancel();
+            cancelIndicatorAnim((LessonViewHolder) holder);
         }
         super.onViewRecycled(holder);
+    }
+
+    @Override
+    public void onViewDetachedFromWindow(@NonNull RecyclerView.ViewHolder holder) {
+        if (holder instanceof LessonViewHolder) {
+            cancelIndicatorAnim((LessonViewHolder) holder);
+        }
+        super.onViewDetachedFromWindow(holder);
+    }
+
+    @Override
+    public void onDetachedFromRecyclerView(@NonNull RecyclerView recyclerView) {
+        for (int i = 0; i < recyclerView.getChildCount(); i++) {
+            RecyclerView.ViewHolder vh = recyclerView.getChildViewHolder(recyclerView.getChildAt(i));
+            if (vh instanceof LessonViewHolder) {
+                cancelIndicatorAnim((LessonViewHolder) vh);
+            }
+        }
+        super.onDetachedFromRecyclerView(recyclerView);
     }
 
     private void setOrHide(TextView tv, String v) {
@@ -699,7 +760,7 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     private String formatTeacherGroupLabel(String grp) {
         if (grp == null || grp.trim().isEmpty()) return "";
         String trimmed = grp.trim();
-        return trimmed.toLowerCase().startsWith("гр.") ? trimmed : ("гр. " + trimmed);
+        return trimmed.toLowerCase(Locale.ROOT).startsWith("гр.") ? trimmed : ("гр. " + trimmed);
     }
 
     private Drawable tintedRound(Context ctx, int color, float alpha, int radiusDp) {
@@ -764,7 +825,7 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
         View typePill, roomChip, stateRow, indicator, noteBadge, progressSegmentContainer;
         ProgressBar progressPart1, progressBreak, progressPart2;
         ImageView ivNoteIcon, ivNotePhotoIcon;
-        TextView tvNoteText, tvLiveBadge;
+        TextView tvNoteText, tvLiveBadge, tvCustomBadge;
         TextView tvLessonNumber, tvTimeStart, tvTimeEnd, tvSubject, tvLessonType,
                 tvTeacher, tvBuilding, tvRoom, tvGroups, tvWeekRange, tvTransferNote,
                 tvSkippedBadge, tvAttendedBadge, tvExemptBadge, tvAttendanceWarning, tvState;
@@ -777,6 +838,7 @@ public class DayScheduleAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
             stateRow = v.findViewById(R.id.stateRow);
             indicator = v.findViewById(R.id.indicator);
             tvLiveBadge = v.findViewById(R.id.tvLiveBadge);
+            tvCustomBadge = v.findViewById(R.id.tvCustomBadge);
             progressSegmentContainer = v.findViewById(R.id.progressSegmentContainer);
             progressPart1 = v.findViewById(R.id.progressPart1);
             progressBreak = v.findViewById(R.id.progressBreak);

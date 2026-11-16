@@ -47,7 +47,7 @@ public final class BuildingInfoDialog {
     }
 
     public static void show(@NonNull AppCompatActivity activity, @Nullable String rawRoom) {
-        if (activity.isFinishing() || rawRoom == null || rawRoom.trim().isEmpty()) return;
+        if (activity.isFinishing() || activity.isDestroyed() || rawRoom == null || rawRoom.trim().isEmpty()) return;
 
         boolean isNight = (activity.getResources().getConfiguration().uiMode
                 & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;

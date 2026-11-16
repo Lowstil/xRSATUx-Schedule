@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 
 import com.university.schedule.data.ScheduleRepository;
+import com.university.schedule.logic.HolidayChecker;
 import com.university.schedule.logic.WeekCalculator;
 import com.university.schedule.model.ScheduleItem;
 import com.university.schedule.model.TransferItem;
@@ -170,19 +171,46 @@ public class AttendanceManager {
         if (semStart == null) return;
 
         WeekCalculator calc = repo.getWeekCalculator();
+        HolidayChecker holidayChecker = repo.getHolidayChecker();
         Set<String> excluded = excludedMgr.getExcludedSubjects(groupName);
 
         // Сканируем от начала семестра до today + 14 дней (чтобы учесть заранее отмеченные пары)
         LocalDate scanEnd = today.plusDays(14);
+        if (semStart.isAfter(scanEnd)) return;
+
+        // Пакетная загрузка расписания и переносов вместо ~240 отдельных запросов к БД
+        List<ScheduleItem> oddLessons = repo.getScheduleForGroupAndWeekType(groupName, Constants.WEEK_TYPE_ODD);
+        List<ScheduleItem> evenLessons = repo.getScheduleForGroupAndWeekType(groupName, Constants.WEEK_TYPE_EVEN);
+        List<TransferItem> allTransfers = repo.getTransfersForDateRange(semStart.toString(), scanEnd.toString());
+        Map<String, List<TransferItem>> transfersByDate = new HashMap<>();
+        if (allTransfers != null) {
+            for (TransferItem t : allTransfers) {
+                if (t.getDate() != null) {
+                    transfersByDate.computeIfAbsent(t.getDate(), k -> new ArrayList<>()).add(t);
+                }
+            }
+        }
+
         LocalDate cursor = semStart;
         while (!cursor.isAfter(scanEnd)) {
             int dow = DateUtils.toScheduleDayOfWeek(cursor);
-            if (dow >= 1 && dow <= 6) {
+            if (dow >= 1 && dow <= 6 && (holidayChecker == null || !holidayChecker.isDayOff(cursor))) {
                 int weekNum = calc.getWeekNumber(cursor);
                 if (weekNum >= 1 && weekNum <= 18) {
-                    String wt = (weekNum % 2 == 0) ? Constants.WEEK_TYPE_EVEN : Constants.WEEK_TYPE_ODD;
-                    List<ScheduleItem> rawLessons = repo.getScheduleForGroupAndWeekType(groupName, wt);
-                    List<TransferItem> transfers = repo.getTransfersForDate(cursor.toString());
+                    List<ScheduleItem> rawLessons = (weekNum % 2 == 0) ? evenLessons : oddLessons;
+                    String dateStr = cursor.toString();
+                    List<TransferItem> transfers = transfersByDate.get(dateStr);
+
+                    Map<Integer, Integer> removalsByLesson = null;
+                    if (transfers != null) {
+                        for (TransferItem t : transfers) {
+                            if (TransferItem.KIND_REMOVAL.equals(t.getKind()) && t.matchesGroup(groupName)) {
+                                if (removalsByLesson == null) removalsByLesson = new HashMap<>();
+                                int ln = t.getLessonNumber();
+                                removalsByLesson.put(ln, removalsByLesson.getOrDefault(ln, 0) + 1);
+                            }
+                        }
+                    }
 
                     boolean isFuture = cursor.isAfter(today);
 
@@ -190,13 +218,20 @@ public class AttendanceManager {
                         for (ScheduleItem item : rawLessons) {
                             if (item.getDayOfWeek() != dow) continue;
                             if (item.isCancelled()) continue;
+                            if (removalsByLesson != null) {
+                                int remCount = removalsByLesson.getOrDefault(item.getLessonNumber(), 0);
+                                if (remCount > 0) {
+                                    removalsByLesson.put(item.getLessonNumber(), remCount - 1);
+                                    continue;
+                                }
+                            }
                             String sub = item.getSubjectName() != null ? item.getSubjectName().trim() : "";
                             if (sub.isEmpty() || (excluded != null && excluded.contains(sub))) continue;
 
                             if (!item.isActiveOnWeek(weekNum)) continue;
 
-                            boolean isSkipped = skippedMgr.isSkipped(cursor.toString(), item.getLessonNumber(), sub);
-                            boolean isAttended = skippedMgr.isAttended(cursor.toString(), item.getLessonNumber(), sub);
+                            boolean isSkipped = skippedMgr.isSkipped(dateStr, item.getLessonNumber(), sub);
+                            boolean isAttended = skippedMgr.isAttended(dateStr, item.getLessonNumber(), sub);
 
                             // Будущие пары учитываем только если пользователь заранее выставил им отметку
                             if (isFuture && !isSkipped && !isAttended) continue;
@@ -216,16 +251,16 @@ public class AttendanceManager {
                         }
                     }
 
-                    // Учитываем переносы, перенесённые на этот день
+                    // Учитываем только добавленные переносы (KIND_ADDITION), но не KIND_ROOM_CHANGE или KIND_REMOVAL
                     if (transfers != null) {
                         for (TransferItem t : transfers) {
-                            if (TransferItem.KIND_REMOVAL.equals(t.getKind())) continue;
+                            if (!TransferItem.KIND_ADDITION.equals(t.getKind())) continue;
                             if (!t.matchesGroup(groupName)) continue;
                             String sub = t.getSubjectName() != null ? t.getSubjectName().trim() : "";
                             if (sub.isEmpty() || (excluded != null && excluded.contains(sub))) continue;
 
-                            boolean isSkipped = skippedMgr.isSkipped(cursor.toString(), t.getLessonNumber(), sub);
-                            boolean isAttended = skippedMgr.isAttended(cursor.toString(), t.getLessonNumber(), sub);
+                            boolean isSkipped = skippedMgr.isSkipped(dateStr, t.getLessonNumber(), sub);
+                            boolean isAttended = skippedMgr.isAttended(dateStr, t.getLessonNumber(), sub);
 
                             if (isFuture && !isSkipped && !isAttended) continue;
 

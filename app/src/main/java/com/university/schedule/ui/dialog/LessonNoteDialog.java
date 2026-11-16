@@ -52,7 +52,7 @@ public final class LessonNoteDialog {
                             @NonNull ScheduleRepository repo,
                             @Nullable PhotoPickerHost photoHost,
                             @Nullable Runnable onSaved) {
-        if (activity.isFinishing() || date == null) return;
+        if (activity.isFinishing() || activity.isDestroyed() || date == null) return;
 
         View dialogView = LayoutInflater.from(activity).inflate(R.layout.dialog_lesson_note, null);
         TextView tvSubject = dialogView.findViewById(R.id.tvNoteDialogSubject);
@@ -183,7 +183,7 @@ public final class LessonNoteDialog {
     }
 
     static void showFullScreenPhoto(@NonNull AppCompatActivity activity, @Nullable String path) {
-        if (path == null || !new File(path).exists() || activity.isFinishing()) return;
+        if (path == null || !new File(path).exists() || activity.isFinishing() || activity.isDestroyed()) return;
         Dialog d = new Dialog(activity, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
         ImageView iv = new ImageView(activity);
         iv.setLayoutParams(new ViewGroup.LayoutParams(

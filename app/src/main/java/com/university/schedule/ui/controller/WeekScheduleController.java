@@ -58,6 +58,13 @@ public class WeekScheduleController {
         loadingWeeks.clear();
     }
 
+    public void destroy() {
+        selectionGeneration++;
+        mainHandler.removeCallbacksAndMessages(null);
+        weekCache.clear();
+        loadingWeeks.clear();
+    }
+
     /**
      * Loads {@code targetWeek} (or returns cached data immediately via {@code listener})
      * and prefetches {@code targetWeek - 1} and {@code targetWeek + 1}.

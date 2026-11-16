@@ -53,7 +53,7 @@ public final class HomeworkHubDialog {
     }
 
     public static void show(@NonNull AppCompatActivity activity, @Nullable Runnable onNotesChanged) {
-        if (activity.isFinishing()) return;
+        if (activity.isFinishing() || activity.isDestroyed()) return;
 
         View dialogView = LayoutInflater.from(activity).inflate(R.layout.dialog_homework_hub, null);
         View rootCard = dialogView.findViewById(R.id.cardHomeworkHubRoot);
@@ -120,6 +120,7 @@ public final class HomeworkHubDialog {
         Runnable reloadFromDb = () -> ex.execute(() -> {
             List<LessonNote> loaded = noteDao.getAllNotes();
             activity.runOnUiThread(() -> {
+                if (activity.isFinishing() || activity.isDestroyed()) return;
                 allNotes.clear();
                 allNotes.addAll(loaded);
                 applyFilterAndRender.run();
@@ -132,6 +133,7 @@ public final class HomeworkHubDialog {
                 ex.execute(() -> {
                     noteDao.setCompleted(note.getDate(), note.getLessonNumber(), completed);
                     activity.runOnUiThread(() -> {
+                        if (activity.isFinishing() || activity.isDestroyed()) return;
                         note.setCompleted(completed);
                         applyFilterAndRender.run();
                         if (onNotesChanged != null) onNotesChanged.run();
@@ -144,6 +146,7 @@ public final class HomeworkHubDialog {
                 ex.execute(() -> {
                     noteDao.delete(note.getDate(), note.getLessonNumber());
                     activity.runOnUiThread(() -> {
+                        if (activity.isFinishing() || activity.isDestroyed()) return;
                         allNotes.remove(note);
                         applyFilterAndRender.run();
                         if (onNotesChanged != null) onNotesChanged.run();

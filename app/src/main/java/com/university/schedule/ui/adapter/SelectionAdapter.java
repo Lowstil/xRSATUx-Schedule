@@ -68,18 +68,18 @@ public class SelectionAdapter extends RecyclerView.Adapter<SelectionAdapter.View
         h.tvName.setText(it.getName());
         boolean current = isCurrent(it);
         h.tvType.setText(current ? "Текущий выбор" : (it.isGroup() ? "Группа" : "Преподаватель"));
-        int color = current ? R.color.primary : R.color.text_secondary;
+        int color = current ? R.color.glass_accent : R.color.glass_text_secondary;
         h.tvType.setTextColor(ContextCompat.getColor(ctx, color));
         h.tvType.setTypeface(null, current ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
 
         boolean isFav = FavoritesManager.isFavorite(ctx, it.getType(), it.getName());
         h.btnFavorite.setImageResource(isFav ? R.drawable.ic_star_filled : R.drawable.ic_star_border);
-        h.btnFavorite.setColorFilter(isFav ? 0xFFFFC107 : ContextCompat.getColor(ctx, R.color.text_secondary));
+        h.btnFavorite.setColorFilter(isFav ? 0xFFFFC107 : ContextCompat.getColor(ctx, R.color.glass_text_secondary));
 
         h.btnFavorite.setOnClickListener(v -> {
             boolean nowFav = FavoritesManager.toggleFavorite(ctx, it.getType(), it.getName());
             h.btnFavorite.setImageResource(nowFav ? R.drawable.ic_star_filled : R.drawable.ic_star_border);
-            h.btnFavorite.setColorFilter(nowFav ? 0xFFFFC107 : ContextCompat.getColor(ctx, R.color.text_secondary));
+            h.btnFavorite.setColorFilter(nowFav ? 0xFFFFC107 : ContextCompat.getColor(ctx, R.color.glass_text_secondary));
             if (favoriteChangeListener != null) {
                 favoriteChangeListener.onFavoriteChanged();
             }

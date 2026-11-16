@@ -26,7 +26,7 @@ public final class ScheduleDiffDialog {
     }
 
     public static void showIfHasChanges(AppCompatActivity activity) {
-        if (activity == null || activity.isFinishing()) return;
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
         PrefsManager prefs = new PrefsManager(activity);
         String json = prefs.getScheduleDiffJson();
         if (json == null || json.trim().isEmpty()) return;
@@ -39,7 +39,7 @@ public final class ScheduleDiffDialog {
     }
 
     public static void show(AppCompatActivity activity) {
-        if (activity == null || activity.isFinishing()) return;
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
         PrefsManager prefs = new PrefsManager(activity);
         ScheduleDiff diff = ScheduleDiff.fromJson(prefs.getScheduleDiffJson());
         showInternal(activity, diff, prefs);

@@ -54,7 +54,7 @@ public final class ScheduleExporter {
     }
 
     public static void showExportDialog(AppCompatActivity activity) {
-        if (activity == null || activity.isFinishing()) return;
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
         ScheduleRepository repo = ScheduleRepository.getInstance(activity);
         if (!repo.hasUserSelection()) {
             Toast.makeText(activity, "Сначала выберите группу или преподавателя", Toast.LENGTH_SHORT).show();
@@ -168,9 +168,16 @@ public final class ScheduleExporter {
                 boolean isGroup = "group".equals(selType);
                 LocalDate today = DateUtils.todayMoscow();
                 WeekCalculator wc = repo.getWeekCalculator();
-                int weekNum = wc != null ? Math.max(1, wc.getWeekNumber(today)) : 1;
+                int weekNum = wc != null ? wc.getWeekNumber(today) : -1;
 
                 if (fullWeek) {
+                    if (weekNum < 1) {
+                        activity.runOnUiThread(() -> {
+                            if (activity.isFinishing() || activity.isDestroyed()) return;
+                            Toast.makeText(activity, "Сейчас вне учебного семестра", Toast.LENGTH_SHORT).show();
+                        });
+                        return;
+                    }
                     WeekSchedule week = isGroup
                             ? repo.getWeekScheduleForGroup(selName, weekNum)
                             : repo.getWeekScheduleForTeacher(selName, weekNum);
@@ -178,10 +185,16 @@ public final class ScheduleExporter {
                         Bitmap bmp = renderWeekBitmap(selName, week);
                         Uri uri = saveBitmapToCache(activity, bmp, "schedule_week.png");
                         bmp.recycle();
-                        activity.runOnUiThread(() -> shareImage(activity, uri, "Расписание на неделю: " + selName));
+                        activity.runOnUiThread(() -> {
+                            if (activity.isFinishing() || activity.isDestroyed()) return;
+                            shareImage(activity, uri, "Расписание на неделю: " + selName);
+                        });
                     } else {
                         String text = formatWeekText(selName, week, isGroup);
-                        activity.runOnUiThread(() -> shareText(activity, text, "Расписание на неделю"));
+                        activity.runOnUiThread(() -> {
+                            if (activity.isFinishing() || activity.isDestroyed()) return;
+                            shareText(activity, text, "Расписание на неделю");
+                        });
                     }
                 } else {
                     DaySchedule day = isGroup
@@ -191,15 +204,23 @@ public final class ScheduleExporter {
                         Bitmap bmp = renderDayBitmap(selName, day);
                         Uri uri = saveBitmapToCache(activity, bmp, "schedule_day.png");
                         bmp.recycle();
-                        activity.runOnUiThread(() -> shareImage(activity, uri, "Расписание на сегодня: " + selName));
+                        activity.runOnUiThread(() -> {
+                            if (activity.isFinishing() || activity.isDestroyed()) return;
+                            shareImage(activity, uri, "Расписание на сегодня: " + selName);
+                        });
                     } else {
                         String text = formatDayText(selName, day, isGroup);
-                        activity.runOnUiThread(() -> shareText(activity, text, "Расписание на сегодня"));
+                        activity.runOnUiThread(() -> {
+                            if (activity.isFinishing() || activity.isDestroyed()) return;
+                            shareText(activity, text, "Расписание на сегодня");
+                        });
                     }
                 }
             } catch (Exception e) {
-                activity.runOnUiThread(() ->
-                        Toast.makeText(activity, "Ошибка экспорта: " + e.getMessage(), Toast.LENGTH_LONG).show());
+                activity.runOnUiThread(() -> {
+                    if (activity.isFinishing() || activity.isDestroyed()) return;
+                    Toast.makeText(activity, "Ошибка экспорта: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                });
             }
         });
     }
@@ -470,7 +491,9 @@ public final class ScheduleExporter {
         intent.setType("image/png");
         intent.putExtra(Intent.EXTRA_STREAM, uri);
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        context.startActivity(Intent.createChooser(intent, title));
+        Intent chooser = Intent.createChooser(intent, title);
+        chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        context.startActivity(chooser);
     }
 
     private static String ellipsize(String s, int max) {

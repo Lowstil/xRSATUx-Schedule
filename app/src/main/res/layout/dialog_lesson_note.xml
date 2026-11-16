@@ -50,7 +50,7 @@
                 android:hint="Например: Сдать лабораторную №2, параграф 4..."
                 android:inputType="textMultiLine"
                 android:minLines="3"
-                android:textColor="@color/text_primary"
+                android:textColor="@color/glass_text_primary"
                 android:textSize="14sp" />
         </com.google.android.material.textfield.TextInputLayout>
 
@@ -60,7 +60,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
             android:text="Прикреплённое фото (доска, задание, конспект):"
-            android:textColor="@color/text_secondary"
+            android:textColor="@color/glass_text_secondary"
             android:textSize="13sp" />
 
         <com.google.android.material.card.MaterialCardView
@@ -70,7 +70,7 @@
             android:layout_marginTop="8dp"
             app:cardCornerRadius="10dp"
             app:cardElevation="0dp"
-            app:strokeColor="@color/outline"
+            app:strokeColor="@color/glass_stroke_start"
             app:strokeWidth="1dp"
             android:visibility="gone">
 
@@ -118,7 +118,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
             android:text="Задание выполнено"
-            android:textColor="@color/text_primary"
+            android:textColor="@color/glass_text_primary"
             android:textSize="14sp" />
 
         <LinearLayout
@@ -135,7 +135,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="8dp"
                 android:text="Удалить"
-                android:textColor="@color/error"
+                android:textColor="@color/glass_danger"
                 android:visibility="gone" />
 
             <com.google.android.material.button.MaterialButton

@@ -1,8 +1,10 @@
 package com.university.schedule.ui.dialog;
 
+import android.app.Activity;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
+import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.LinearLayout;
@@ -29,6 +31,8 @@ public final class BellScheduleDialog {
     }
 
     public static void show(Context context) {
+        if (context == null) return;
+        if (context instanceof Activity act && (act.isFinishing() || act.isDestroyed())) return;
         View view = LayoutInflater.from(context).inflate(R.layout.dialog_bell_schedule, null);
         TabLayout tabLayout = view.findViewById(R.id.tabBellSchedule);
         LinearLayout llRows = view.findViewById(R.id.llBellRows);
@@ -118,7 +122,7 @@ public final class BellScheduleDialog {
                 LocalTime end = LocalTime.parse(endStr, TF);
                 if (!now.isBefore(start) && !now.isAfter(end)) {
                     tvBadge.setVisibility(View.VISIBLE);
-                    row.setBackground(createRoundDrawable(ContextCompat.getColor(context, R.color.state_current_bg), 1f, 8));
+                    row.setBackground(createRoundDrawable(context, ContextCompat.getColor(context, R.color.state_current_bg), 1f, 8));
                 }
             }
 
@@ -133,11 +137,13 @@ public final class BellScheduleDialog {
         return gd;
     }
 
-    private static GradientDrawable createRoundDrawable(int color, float alpha, int radiusDp) {
+    private static GradientDrawable createRoundDrawable(Context context, int color, float alpha, int radiusDp) {
         GradientDrawable gd = new GradientDrawable();
         gd.setShape(GradientDrawable.RECTANGLE);
         gd.setColor(Color.argb((int) (alpha * 255), Color.red(color), Color.green(color), Color.blue(color)));
-        gd.setCornerRadius(radiusDp * 3);
+        float radiusPx = TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP, radiusDp, context.getResources().getDisplayMetrics());
+        gd.setCornerRadius(radiusPx);
         return gd;
     }
 }

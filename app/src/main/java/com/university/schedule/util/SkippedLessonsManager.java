@@ -35,7 +35,7 @@ public class SkippedLessonsManager {
         return (date != null ? date : "") + "#" + lessonNumber + "#" + (subjectName != null ? subjectName.trim() : "");
     }
 
-    public boolean isSkipped(String date, int lessonNumber, String subjectName) {
+    public synchronized boolean isSkipped(String date, int lessonNumber, String subjectName) {
         if (date == null) return false;
         Set<String> set = prefs.getStringSet(PREF_SKIPPED, null);
         if (set == null || set.isEmpty()) return false;
@@ -56,7 +56,7 @@ public class SkippedLessonsManager {
         return isSkipped(date, lessonNumber, subjectName);
     }
 
-    public boolean isAttended(String date, int lessonNumber, String subjectName) {
+    public synchronized boolean isAttended(String date, int lessonNumber, String subjectName) {
         if (date == null) return false;
         Set<String> set = prefs.getStringSet(PREF_ATTENDED, null);
         if (set == null || set.isEmpty()) return false;
@@ -73,7 +73,7 @@ public class SkippedLessonsManager {
         return date != null && isAttended(date.toString(), lessonNumber, subjectName);
     }
 
-    public AttendanceStatus getStatus(String date, int lessonNumber, String subjectName) {
+    public synchronized AttendanceStatus getStatus(String date, int lessonNumber, String subjectName) {
         if (isSkipped(date, lessonNumber, subjectName)) {
             return AttendanceStatus.SKIPPED;
         }
@@ -87,7 +87,7 @@ public class SkippedLessonsManager {
         return date != null ? getStatus(date.toString(), lessonNumber, subjectName) : AttendanceStatus.NONE;
     }
 
-    public void markSkipped(String date, int lessonNumber, String subjectName) {
+    public synchronized void markSkipped(String date, int lessonNumber, String subjectName) {
         if (date == null) return;
         String exactKey = buildKey(date, lessonNumber, subjectName);
         String shortKey = date + "#" + lessonNumber + "#";
@@ -114,7 +114,7 @@ public class SkippedLessonsManager {
         markSkipped(date, lessonNumber, subjectName);
     }
 
-    public void markAttended(String date, int lessonNumber, String subjectName) {
+    public synchronized void markAttended(String date, int lessonNumber, String subjectName) {
         if (date == null) return;
         String exactKey = buildKey(date, lessonNumber, subjectName);
         String shortKey = date + "#" + lessonNumber + "#";
@@ -137,7 +137,7 @@ public class SkippedLessonsManager {
         if (date != null) markAttended(date.toString(), lessonNumber, subjectName);
     }
 
-    public void clearStatus(String date, int lessonNumber, String subjectName) {
+    public synchronized void clearStatus(String date, int lessonNumber, String subjectName) {
         if (date == null) return;
         String exactKey = buildKey(date, lessonNumber, subjectName);
         String shortKey = date + "#" + lessonNumber + "#";
@@ -162,7 +162,7 @@ public class SkippedLessonsManager {
         clearStatus(date, lessonNumber, subjectName);
     }
 
-    public boolean toggleSkipped(String date, int lessonNumber, String subjectName) {
+    public synchronized boolean toggleSkipped(String date, int lessonNumber, String subjectName) {
         if (date == null) return false;
         boolean currentlySkipped = isSkipped(date, lessonNumber, subjectName);
         if (currentlySkipped) {
@@ -174,7 +174,7 @@ public class SkippedLessonsManager {
         }
     }
 
-    public void setSkipped(String date, int lessonNumber, String subjectName, boolean skipped) {
+    public synchronized void setSkipped(String date, int lessonNumber, String subjectName, boolean skipped) {
         if (skipped) {
             markSkipped(date, lessonNumber, subjectName);
         } else {

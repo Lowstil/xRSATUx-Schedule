@@ -7,9 +7,12 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -91,15 +94,36 @@ public class ScheduleDownloader {
         if (links.isEmpty()) throw new IOException("Ссылка на .xlsx не найдена на странице");
 
         String fileUrl = links.get(0);
-        if (fileUrl.startsWith("/")) fileUrl = BASE_URL + fileUrl;
-        if (fileUrl.startsWith("//")) fileUrl = "https:" + fileUrl;
+        if (!fileUrl.startsWith("http://") && !fileUrl.startsWith("https://")) {
+            try {
+                fileUrl = new URL(new URL(PAGE_URL), fileUrl).toString();
+            } catch (Exception e) {
+                if (fileUrl.startsWith("//")) fileUrl = "https:" + fileUrl;
+                else if (fileUrl.startsWith("/")) fileUrl = BASE_URL + fileUrl;
+            }
+        }
         Log.d(TAG, "Найдена ссылка: " + fileUrl);
 
-        String filename = fileUrl.substring(fileUrl.lastIndexOf('/') + 1);
-        if (filename.isEmpty()) filename = "schedule.xlsx";
+        String pathOnly = fileUrl;
+        try {
+            String p = URI.create(fileUrl).getPath();
+            if (p != null && !p.isEmpty()) pathOnly = p;
+        } catch (Exception ignored) {
+            int qIdx = pathOnly.indexOf('?');
+            if (qIdx >= 0) pathOnly = pathOnly.substring(0, qIdx);
+            int hIdx = pathOnly.indexOf('#');
+            if (hIdx >= 0) pathOnly = pathOnly.substring(0, hIdx);
+        }
+        String filename = pathOnly.substring(pathOnly.lastIndexOf('/') + 1);
+        if (filename.isEmpty() || !filename.toLowerCase(Locale.ROOT).endsWith(".xlsx")) {
+            filename = "schedule.xlsx";
+        }
         File dir = new File(context.getFilesDir(), "downloads");
-        if (!dir.exists()) dir.mkdirs();
+        if (!dir.exists() && !dir.mkdirs()) {
+            throw new IOException("Не удалось создать каталог downloads");
+        }
         File out = new File(dir, filename);
+        File tmp = new File(dir, filename + ".tmp");
 
         Request req = new Request.Builder().url(fileUrl)
                 .header("User-Agent", UA)
@@ -111,16 +135,25 @@ public class ScheduleDownloader {
             if (!resp.isSuccessful()) throw new IOException("HTTP " + resp.code() + " при скачивании файла");
             ResponseBody body = resp.body();
             if (body == null) throw new IOException("Пустое тело ответа");
-            InputStream in = body.byteStream();
-            FileOutputStream fos = new FileOutputStream(out);
-            try {
+            try (InputStream in = body.byteStream();
+                 FileOutputStream fos = new FileOutputStream(tmp)) {
                 byte[] buf = new byte[8192];
                 int n;
                 while ((n = in.read(buf)) != -1) fos.write(buf, 0, n);
-            } finally {
-                fos.close();
-                in.close();
+                fos.flush();
+            } catch (IOException e) {
+                //noinspection ResultOfMethodCallIgnored
+                tmp.delete();
+                throw e;
             }
+        }
+        if (out.exists() && !out.delete()) {
+            Log.w(TAG, "Не удалось удалить старый файл перед заменой: " + out.getName());
+        }
+        if (!tmp.renameTo(out)) {
+            //noinspection ResultOfMethodCallIgnored
+            tmp.delete();
+            throw new IOException("Не удалось сохранить скачанный файл " + out.getName());
         }
         Log.d(TAG, "Сохранено: " + out.getAbsolutePath() + " (" + out.length() + " байт)");
         return out;

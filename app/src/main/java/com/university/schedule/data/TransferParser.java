@@ -17,6 +17,7 @@ import java.io.InputStream;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Парсер файла "Журнал переносов" (отдельный .xlsx, отдельный от основного
@@ -69,9 +70,10 @@ public class TransferParser {
 
     /** Ищет лист, чьё имя содержит фрагмент (без учёта регистра) — устойчиво к вариациям названия. */
     private Sheet findSheet(Workbook wb, String nameContains) {
+        String lowContains = nameContains.toLowerCase(Locale.ROOT);
         for (int i = 0; i < wb.getNumberOfSheets(); i++) {
             String name = wb.getSheetName(i);
-            if (name != null && name.toLowerCase().contains(nameContains.toLowerCase())) {
+            if (name != null && name.toLowerCase(Locale.ROOT).contains(lowContains)) {
                 return wb.getSheetAt(i);
             }
         }
@@ -128,7 +130,11 @@ public class TransferParser {
                 addition.setRoom(room.isEmpty() ? null : room);
                 addition.setLinkId(linkId);
                 if (removalDate != null) {
-                    addition.setNote("Перенесено с " + formatRu(removalDate) + ", " + removalLesson + " пара");
+                    if (removalLesson > 0) {
+                        addition.setNote("Перенесено с " + formatRu(removalDate) + ", " + removalLesson + " пара");
+                    } else {
+                        addition.setNote("Перенесено с " + formatRu(removalDate));
+                    }
                 }
                 out.add(addition);
             }
@@ -172,12 +178,13 @@ public class TransferParser {
     }
 
     private int findHeaderRow(Sheet sheet, int col, String expectedContains) {
-        int limit = Math.min(4, sheet.getLastRowNum() + 1);
+        int limit = Math.min(9, sheet.getLastRowNum() + 1);
+        String expectedLow = expectedContains.toLowerCase(Locale.ROOT);
         for (int r = 0; r < limit; r++) {
             Row row = sheet.getRow(r);
             if (row == null) continue;
             String v = trim(getStr(row.getCell(col)));
-            if (v.toLowerCase().contains(expectedContains.toLowerCase())) return r;
+            if (v.toLowerCase(Locale.ROOT).contains(expectedLow)) return r;
         }
         return -1;
     }
@@ -188,7 +195,7 @@ public class TransferParser {
         String digits = s.replaceAll("[^0-9]", "");
         if (digits.isEmpty()) return -1;
         try {
-            int n = Integer.parseInt(digits.substring(0, 1));
+            int n = Integer.parseInt(digits);
             return (n >= 1 && n <= 7) ? n : -1;
         } catch (NumberFormatException e) {
             return -1;
@@ -228,7 +235,7 @@ public class TransferParser {
     }
 
     private String formatRu(LocalDate d) {
-        return String.format("%02d.%02d.%04d", d.getDayOfMonth(), d.getMonthValue(), d.getYear());
+        return String.format(Locale.ROOT, "%02d.%02d.%04d", d.getDayOfMonth(), d.getMonthValue(), d.getYear());
     }
 
     private String trim(String s) {
@@ -278,8 +285,16 @@ public class TransferParser {
 
         @Override
         public int read(byte[] b, int off, int len) throws IOException {
-            checkLimit(len);
-            int n = delegate.read(b, off, len);
+            if (len <= 0) return delegate.read(b, off, len);
+            long remaining = maxBytes - readSoFar;
+            if (remaining <= 0) {
+                if (delegate.read() != -1) {
+                    throw new IOException("Файл переносов превышает допустимый размер (" + maxBytes + " байт)");
+                }
+                return -1;
+            }
+            int toRead = (int) Math.min(len, remaining);
+            int n = delegate.read(b, off, toRead);
             if (n > 0) readSoFar += n;
             return n;
         }

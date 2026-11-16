@@ -42,7 +42,7 @@ public final class MarkAttendanceDialog {
                             @Nullable AttendanceManager mgr,
                             @Nullable SkippedLessonsManager skippedMgr,
                             @Nullable Runnable onChanged) {
-        if (activity.isFinishing() || date == null || item == null || skippedMgr == null) return;
+        if (activity.isFinishing() || activity.isDestroyed() || date == null || item == null || skippedMgr == null) return;
 
         View dialogView = LayoutInflater.from(activity).inflate(R.layout.dialog_mark_lesson_attendance, null);
 

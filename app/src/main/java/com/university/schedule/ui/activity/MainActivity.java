@@ -1,10 +1,12 @@
 package com.university.schedule.ui.activity;
 
 import android.Manifest;
+import android.app.Dialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
@@ -26,6 +28,7 @@ import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
@@ -55,6 +58,8 @@ import com.university.schedule.ui.controller.WeekScheduleController;
 import com.university.schedule.ui.dialog.AttendanceDialog;
 import com.university.schedule.ui.dialog.BellScheduleDialog;
 import com.university.schedule.ui.dialog.BuildingInfoDialog;
+import com.university.schedule.ui.dialog.CompareScheduleDialog;
+import com.university.schedule.ui.dialog.CustomEventDialog;
 import com.university.schedule.ui.dialog.HomeworkHubDialog;
 import com.university.schedule.ui.dialog.LessonNoteDialog;
 import com.university.schedule.ui.dialog.MarkAttendanceDialog;
@@ -80,13 +85,23 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
 
+    private static final String KEY_PENDING_PHOTO_DATE = "pending_photo_date";
+    private static final String KEY_PENDING_PHOTO_LESSON = "pending_photo_lesson";
+    private static final String KEY_PENDING_PHOTO_SUBJECT = "pending_photo_subject";
+
     private LessonNoteDialog.PhotoCallback activePhotoCallback;
+    private String pendingPhotoDateIso;
+    private int pendingPhotoLessonNum = -1;
+    private String pendingPhotoSubject;
+    private final List<Dialog> activeDialogs = new ArrayList<>();
     private ActivityResultLauncher<String> pickPhotoLauncher;
     private ActivityResultLauncher<String> requestPermissionLauncher;
 
@@ -140,6 +155,12 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(s);
         EdgeToEdgeCompat.enableEdgeToEdge(this);
         setContentView(R.layout.activity_main);
+
+        if (s != null) {
+            pendingPhotoDateIso = s.getString(KEY_PENDING_PHOTO_DATE);
+            pendingPhotoLessonNum = s.getInt(KEY_PENDING_PHOTO_LESSON, -1);
+            pendingPhotoSubject = s.getString(KEY_PENDING_PHOTO_SUBJECT);
+        }
 
         repo = ScheduleRepository.getInstance(this);
         calc = repo.getWeekCalculator();
@@ -219,13 +240,48 @@ public class MainActivity extends AppCompatActivity {
         pickPhotoLauncher = registerForActivityResult(
                 new ActivityResultContracts.GetContent(),
                 uri -> {
-                    if (uri != null && activePhotoCallback != null) {
+                    if (uri == null) {
+                        clearPendingPhotoTarget();
+                        return;
+                    }
+                    if (activePhotoCallback != null) {
+                        clearPendingPhotoTarget();
                         ex.execute(() -> {
                             String localPath = savePickedImageToInternalStorage(uri);
                             runOnUiThread(() -> {
+                                if (isFinishing() || isDestroyed()) return;
                                 if (activePhotoCallback != null) {
                                     activePhotoCallback.onPhotoReady(localPath);
                                 }
+                            });
+                        });
+                    } else if (pendingPhotoDateIso != null && pendingPhotoLessonNum > 0) {
+                        final String dateIso = pendingPhotoDateIso;
+                        final int lessonNum = pendingPhotoLessonNum;
+                        final String subject = pendingPhotoSubject;
+                        clearPendingPhotoTarget();
+                        ex.execute(() -> {
+                            String localPath = savePickedImageToInternalStorage(uri);
+                            Map<Integer, LessonNote> notesForDate = repo.getNotesForDate(dateIso);
+                            LessonNote existing = notesForDate != null ? notesForDate.get(lessonNum) : null;
+                            LessonNote noteToShow = existing != null ? existing : new LessonNote();
+                            if (existing == null) {
+                                noteToShow.setDate(dateIso);
+                                noteToShow.setLessonNumber(lessonNum);
+                                noteToShow.setSubjectName(subject != null ? subject : "");
+                            }
+                            noteToShow.setImagePath(localPath);
+
+                            ScheduleItem item = new ScheduleItem();
+                            item.setLessonNumber(lessonNum);
+                            item.setSubjectName(subject != null ? subject : "");
+
+                            runOnUiThread(() -> {
+                                if (isFinishing() || isDestroyed()) return;
+                                try {
+                                    LocalDate parsedDate = LocalDate.parse(dateIso);
+                                    showLessonNoteDialog(item, parsedDate, noteToShow);
+                                } catch (Exception ignored) { }
                             });
                         });
                     }
@@ -433,6 +489,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showMoreMenuDialog() {
+        if (isFinishing() || isDestroyed()) return;
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         int padH = dpToPx(18);
@@ -465,9 +522,26 @@ public class MainActivity extends AppCompatActivity {
         AlertDialog dialog = new MaterialAlertDialogBuilder(this)
                 .setView(root)
                 .create();
+        trackDialog(dialog);
 
         btnClose.setOnClickListener(v -> dialog.dismiss());
 
+        addMoreMenuItem(root, "➕", "Личное событие", null, () -> {
+            dialog.dismiss();
+            LocalDate currentPageDate = getCurrentPageDate();
+            boolean isGroup = GroupOrTeacher.TYPE_GROUP.equals(selType);
+            AlertDialog customDlg = CustomEventDialog.show(this, currentPageDate, selName, isGroup, () -> {
+                clearWeekCache();
+                loadWeek();
+                WidgetUpdateHelper.updateAllWidgets(this);
+                LiveLessonService.syncNow(this);
+            });
+            trackDialog(customDlg);
+        });
+        addMoreMenuItem(root, "⚖️", "Сравнить группы (Общие окна)", null, () -> {
+            dialog.dismiss();
+            CompareScheduleDialog.show(this, selName, null);
+        });
         int pendingCount = (noteDao != null) ? noteDao.getPendingNotesCount() : 0;
         addMoreMenuItem(root, "📝", "Домашки и заметки", pendingCount > 0 ? String.valueOf(pendingCount) : null, () -> {
             dialog.dismiss();
@@ -585,6 +659,7 @@ public class MainActivity extends AppCompatActivity {
         AlertDialog dialog = new MaterialAlertDialogBuilder(this)
                 .setView(root)
                 .create();
+        trackDialog(dialog);
 
         btnCancel.setOnClickListener(v -> dialog.dismiss());
         btnSelect.setOnClickListener(v -> {
@@ -632,6 +707,7 @@ public class MainActivity extends AppCompatActivity {
                 .setView(root)
                 .setCancelable(false)
                 .create();
+        trackDialog(dialog);
 
         btnLater.setOnClickListener(v -> {
             prefs.setFirstLaunchCompleted(true);
@@ -759,7 +835,7 @@ public class MainActivity extends AppCompatActivity {
             });
 
             chip.setOnLongClickListener(v -> {
-                showRemoveFavoriteDialog(fav);
+                showFavoriteActionsDialog(fav);
                 return true;
             });
 
@@ -776,78 +852,36 @@ public class MainActivity extends AppCompatActivity {
         llFavorites.addView(btnAdd);
     }
 
-    private void showRemoveFavoriteDialog(GroupOrTeacher fav) {
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        int pad = dpToPx(22);
-        root.setPadding(pad, pad, pad, dpToPx(16));
-
-        TextView tvTitle = new TextView(this);
-        tvTitle.setText("Удалить из избранного?");
-        tvTitle.setTextSize(18);
-        tvTitle.setTypeface(null, Typeface.BOLD);
-        tvTitle.setTextColor(ContextCompat.getColor(this, R.color.glass_text_primary));
-        root.addView(tvTitle);
-
-        TextView tvMsg = new TextView(this);
-        tvMsg.setText("Удалить «" + fav.getName() + "» из избранного?");
-        tvMsg.setTextSize(14);
-        tvMsg.setTextColor(ContextCompat.getColor(this, R.color.glass_text_secondary));
-        LinearLayout.LayoutParams msgLp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
+    private void showFavoriteActionsDialog(GroupOrTeacher fav) {
+        if (isFinishing() || isDestroyed()) return;
+        LinearLayout root = createGlassMessageDialogRoot(
+                fav.getName(),
+                "Выберите действие для «" + fav.getName() + "»"
         );
-        msgLp.topMargin = dpToPx(10);
-        tvMsg.setLayoutParams(msgLp);
-        root.addView(tvMsg);
-
-        LinearLayout actions = new LinearLayout(this);
-        actions.setOrientation(LinearLayout.HORIZONTAL);
-        actions.setGravity(android.view.Gravity.END);
-        LinearLayout.LayoutParams actLp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-        );
-        actLp.topMargin = dpToPx(20);
-        actions.setLayoutParams(actLp);
-
-        TextView btnCancel = new TextView(this);
-        btnCancel.setText("Отмена");
-        btnCancel.setTextSize(14);
-        btnCancel.setTypeface(null, Typeface.BOLD);
-        btnCancel.setTextColor(ContextCompat.getColor(this, R.color.glass_text_secondary));
-        btnCancel.setPadding(dpToPx(16), dpToPx(10), dpToPx(16), dpToPx(10));
-        GlassSurfaceHelper.applyGlassCard(btnCancel, 999f, false);
-
-        TextView btnDelete = new TextView(this);
-        btnDelete.setText("Удалить");
-        btnDelete.setTextSize(14);
-        btnDelete.setTypeface(null, Typeface.BOLD);
-        btnDelete.setTextColor(ContextCompat.getColor(this, R.color.glass_danger));
-        btnDelete.setPadding(dpToPx(16), dpToPx(10), dpToPx(16), dpToPx(10));
-        LinearLayout.LayoutParams delLp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-        );
-        delLp.setMarginStart(dpToPx(10));
-        btnDelete.setLayoutParams(delLp);
-        GlassSurfaceHelper.applyGlassCard(btnDelete, 999f, false);
-
-        actions.addView(btnCancel);
-        actions.addView(btnDelete);
-        root.addView(actions);
 
         AlertDialog dialog = new MaterialAlertDialogBuilder(this)
                 .setView(root)
                 .create();
+        trackDialog(dialog);
 
-        btnCancel.setOnClickListener(v -> dialog.dismiss());
-        btnDelete.setOnClickListener(v -> {
+        if (!fav.getName().equalsIgnoreCase(selName)) {
+            addMoreMenuItem(root, "⚖️", "Сравнить с текущей", null, () -> {
+                dialog.dismiss();
+                CompareScheduleDialog.show(this, selName, fav.getName());
+            });
+        }
+        addMoreMenuItem(root, "🗑", "Удалить из избранного", null, () -> {
             FavoritesManager.removeFavorite(this, fav.getType(), fav.getName());
             updateFavoritesBar();
             dialog.dismiss();
             Toast.makeText(this, "Удалено из избранного", Toast.LENGTH_SHORT).show();
         });
+
+        LinearLayout actions = createGlassDialogActionsRow();
+        TextView btnCancel = createGlassDialogButton("Отмена", R.color.glass_text_secondary, false);
+        btnCancel.setOnClickListener(v -> dialog.dismiss());
+        actions.addView(btnCancel);
+        root.addView(actions);
 
         dialog.show();
         GlassSurfaceHelper.applyGlassDialog(dialog, root);
@@ -872,6 +906,9 @@ public class MainActivity extends AppCompatActivity {
                 repo,
                 cb -> {
                     activePhotoCallback = cb;
+                    pendingPhotoDateIso = date.toString();
+                    pendingPhotoLessonNum = item.getLessonNumber();
+                    pendingPhotoSubject = item.getSubjectName();
                     pickPhotoLauncher.launch("image/*");
                 },
                 () -> {
@@ -904,6 +941,10 @@ public class MainActivity extends AppCompatActivity {
 
     private void showSkipLessonDialog(ScheduleItem item, LocalDate date) {
         if (date == null || item == null) return;
+        if (item.isCustom()) {
+            showDeleteCustomEventDialog(item);
+            return;
+        }
         boolean isGroup = GroupOrTeacher.TYPE_GROUP.equals(selType);
         MarkAttendanceDialog.show(
                 this,
@@ -914,6 +955,56 @@ public class MainActivity extends AppCompatActivity {
                 skippedLessonsManager,
                 this::onAttendanceStateChanged
         );
+    }
+
+    private void showDeleteCustomEventDialog(ScheduleItem item) {
+        if (isFinishing() || isDestroyed()) return;
+        LinearLayout root = createGlassMessageDialogRoot(
+                "Удалить личное событие?",
+                "Удалить «" + (item.getSubjectName() != null ? item.getSubjectName() : "") + "»?"
+        );
+        LinearLayout actions = createGlassDialogActionsRow();
+        TextView btnCancel = createGlassDialogButton("Отмена", R.color.glass_text_secondary, false);
+        TextView btnDelete = createGlassDialogButton("Удалить", R.color.glass_danger, false);
+        LinearLayout.LayoutParams delLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        delLp.setMarginStart(dpToPx(10));
+        btnDelete.setLayoutParams(delLp);
+        actions.addView(btnCancel);
+        actions.addView(btnDelete);
+        root.addView(actions);
+
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setView(root)
+                .create();
+        trackDialog(dialog);
+
+        btnCancel.setOnClickListener(v -> dialog.dismiss());
+        btnDelete.setOnClickListener(v -> {
+            dialog.dismiss();
+            long customId = item.getCustomId();
+            ex.execute(() -> {
+                repo.deleteCustomEvent(customId);
+                runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    clearWeekCache();
+                    loadWeek();
+                    WidgetUpdateHelper.updateAllWidgets(this);
+                    LiveLessonService.syncNow(this);
+                    Toast.makeText(this, "Событие удалено", Toast.LENGTH_SHORT).show();
+                });
+            });
+        });
+
+        dialog.show();
+        GlassSurfaceHelper.applyGlassDialog(dialog, root);
+        Window window = dialog.getWindow();
+        if (window != null) {
+            int width = (int) (getResources().getDisplayMetrics().widthPixels * 0.88);
+            window.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
     }
 
     private void onAttendanceStateChanged() {
@@ -1074,16 +1165,19 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 tvBadge.setVisibility(View.VISIBLE);
                 tvBadge.setText(label);
+                Drawable badgeBg = tvBadge.getBackground();
                 if ("Сегодня".equals(label)) {
-                    tvBadge.getBackground().mutate().setTint(ContextCompat.getColor(this, R.color.badge_today_bg));
+                    if (badgeBg != null) badgeBg.mutate().setTint(ContextCompat.getColor(this, R.color.badge_today_bg));
                     tvBadge.setTextColor(ContextCompat.getColor(this, R.color.badge_today_text));
                 } else if ("Завтра".equals(label)) {
-                    tvBadge.getBackground().mutate().setTint(ContextCompat.getColor(this, R.color.badge_tomorrow_bg));
+                    if (badgeBg != null) badgeBg.mutate().setTint(ContextCompat.getColor(this, R.color.badge_tomorrow_bg));
                     tvBadge.setTextColor(ContextCompat.getColor(this, R.color.badge_tomorrow_text));
                 } else {
                     int accent = ContextCompat.getColor(this, R.color.glass_accent);
-                    tvBadge.getBackground().mutate().setTint(
-                            androidx.core.graphics.ColorUtils.setAlphaComponent(accent, 34));
+                    if (badgeBg != null) {
+                        badgeBg.mutate().setTint(
+                                androidx.core.graphics.ColorUtils.setAlphaComponent(accent, 34));
+                    }
                     tvBadge.setTextColor(accent);
                 }
             }
@@ -1145,7 +1239,7 @@ public class MainActivity extends AppCompatActivity {
         if (next != null) {
             nextKey = new ScheduleClock.LessonKey(next.getDayOfWeek(), next.getLessonNumber(), next.getDate());
         }
-        pagerAdapter.applyClock(st, nextKey, next);
+        pagerAdapter.updateClockOnly(st, nextKey, next);
         WidgetUpdateHelper.updateAllWidgets(this);
         LiveLessonService.syncNow(this);
     }
@@ -1167,6 +1261,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onSuccess() {
                 runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) return;
                     swipeRefresh.setRefreshing(false);
                     repo.refreshLogic();
                     calc = repo.getWeekCalculator();
@@ -1182,6 +1277,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onError(AppError error) {
                 runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) return;
                     swipeRefresh.setRefreshing(false);
                     Snackbar.make(swipeRefresh, error.userMessage, Snackbar.LENGTH_LONG)
                             .setAction("Повторить", v -> refresh())
@@ -1243,10 +1339,52 @@ public class MainActivity extends AppCompatActivity {
         return false;
     }
 
+    private void trackDialog(Dialog dialog) {
+        if (dialog == null) return;
+        activeDialogs.add(dialog);
+        dialog.setOnDismissListener(d -> activeDialogs.remove(dialog));
+    }
+
+    private void clearPendingPhotoTarget() {
+        pendingPhotoDateIso = null;
+        pendingPhotoLessonNum = -1;
+        pendingPhotoSubject = null;
+    }
+
+    private LocalDate getCurrentPageDate() {
+        if (currentWeek != null && currentWeek.getDays() != null
+                && dayIndex >= 0 && dayIndex < currentWeek.getDays().size()) {
+            LocalDate d = currentWeek.getDays().get(dayIndex).getDate();
+            if (d != null) return d;
+        }
+        return DateUtils.todayMoscow();
+    }
+
+    @Override
+    protected void onSaveInstanceState(@NonNull Bundle outState) {
+        super.onSaveInstanceState(outState);
+        if (pendingPhotoDateIso != null && pendingPhotoLessonNum > 0) {
+            outState.putString(KEY_PENDING_PHOTO_DATE, pendingPhotoDateIso);
+            outState.putInt(KEY_PENDING_PHOTO_LESSON, pendingPhotoLessonNum);
+            outState.putString(KEY_PENDING_PHOTO_SUBJECT, pendingPhotoSubject);
+        }
+    }
+
     @Override
     protected void onDestroy() {
         super.onDestroy();
         clockHandler.removeCallbacks(clockTick);
+        if (weekController != null) {
+            weekController.destroy();
+        }
+        for (Dialog d : new ArrayList<>(activeDialogs)) {
+            if (d != null && d.isShowing()) {
+                try {
+                    d.dismiss();
+                } catch (Exception ignored) { }
+            }
+        }
+        activeDialogs.clear();
         ex.shutdown();
     }
 }

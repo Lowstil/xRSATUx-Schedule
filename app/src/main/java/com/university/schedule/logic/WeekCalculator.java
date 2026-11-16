@@ -51,7 +51,8 @@ public class WeekCalculator {
     /** Понедельник заданной учебной недели (1..18); null если номер некорректен. */
     public LocalDate getMondayOfWeek(int weekNumber) {
         if (weekNumber < 1 || weekNumber > SemesterInfo.TOTAL_WEEKS) return null;
-        return semesterInfo.getStartDate().plusWeeks(weekNumber - 1L);
+        if (semesterInfo == null || semesterInfo.getStartDate() == null) return null;
+        return DateUtils.mondayOfWeek(semesterInfo.getStartDate()).plusWeeks(weekNumber - 1L);
     }
 
     /** Суббота заданной учебной недели. */

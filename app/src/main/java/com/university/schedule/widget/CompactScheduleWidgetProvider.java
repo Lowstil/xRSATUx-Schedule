@@ -196,12 +196,12 @@ public class CompactScheduleWidgetProvider extends AppWidgetProvider {
                 views.setProgressBar(R.id.compactProgressBreak, 5, elapsed - 45, false);
                 views.setProgressBar(R.id.compactProgressPart2, 45, 0, false);
             } else {
-                int leftToEnd = 95 - elapsed;
-                if (leftToEnd < 0) leftToEnd = 0;
+                int leftToEnd = Math.max(0, totalMins - elapsed);
+                int part2Max = Math.max(1, totalMins - 50);
                 views.setTextViewText(R.id.tvCompactTimeCountdown, "2-я пол. (до конца " + leftToEnd + " мин)");
                 views.setProgressBar(R.id.compactProgressPart1, 45, 45, false);
                 views.setProgressBar(R.id.compactProgressBreak, 5, 5, false);
-                views.setProgressBar(R.id.compactProgressPart2, 45, elapsed - 50, false);
+                views.setProgressBar(R.id.compactProgressPart2, part2Max, Math.min(part2Max, elapsed - 50), false);
             }
             return views;
         }

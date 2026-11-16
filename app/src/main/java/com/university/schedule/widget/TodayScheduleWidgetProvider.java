@@ -22,12 +22,15 @@ import com.university.schedule.model.WeekSchedule;
 import com.university.schedule.ui.activity.MainActivity;
 import com.university.schedule.util.Constants;
 import com.university.schedule.util.DateUtils;
+import com.university.schedule.util.ExcludedSubjectsManager;
+import com.university.schedule.util.SkippedLessonsManager;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -61,8 +64,24 @@ public class TodayScheduleWidgetProvider extends AppWidgetProvider {
     public void onReceive(Context context, Intent intent) {
         super.onReceive(context, intent);
         if (intent != null && ACTION_MANUAL_REFRESH.equals(intent.getAction())) {
-            updateAllWidgets(context);
-            CompactScheduleWidgetProvider.updateAllWidgets(context);
+            final PendingResult pendingResult = goAsync();
+            final Context appCtx = context.getApplicationContext();
+            ex.execute(() -> {
+                try {
+                    AppWidgetManager manager = AppWidgetManager.getInstance(appCtx);
+                    int[] ids = manager.getAppWidgetIds(new ComponentName(appCtx, TodayScheduleWidgetProvider.class));
+                    if (ids != null) {
+                        for (int id : ids) {
+                            updateWidgetSync(appCtx, manager, id);
+                        }
+                    }
+                    CompactScheduleWidgetProvider.updateAllWidgets(appCtx);
+                } finally {
+                    if (pendingResult != null) {
+                        pendingResult.finish();
+                    }
+                }
+            });
         }
     }
 
@@ -136,7 +155,7 @@ public class TodayScheduleWidgetProvider extends AppWidgetProvider {
         } else {
             views.setTextViewText(R.id.widgetTitle, selName);
             boolean isGroup = GroupOrTeacher.TYPE_GROUP.equals(selType);
-            WidgetScheduleResult res = resolveWidgetSchedule(repo, selName, isGroup);
+            WidgetScheduleResult res = resolveWidgetSchedule(context, repo, selName, isGroup);
             DaySchedule displayDay = res.daySchedule;
 
             if (res.isPreview) {
@@ -207,11 +226,19 @@ public class TodayScheduleWidgetProvider extends AppWidgetProvider {
      * или превью на завтра (пропуская воскресенье, если завтра — ВС).
      */
     static WidgetScheduleResult resolveWidgetSchedule(ScheduleRepository repo, String selName, boolean isGroup) {
+        return resolveWidgetSchedule(null, repo, selName, isGroup);
+    }
+
+    static WidgetScheduleResult resolveWidgetSchedule(Context context, ScheduleRepository repo, String selName, boolean isGroup) {
         LocalDate today = DateUtils.todayMoscow();
         LocalTime now = DateUtils.nowTimeMoscow();
         DaySchedule todaySchedule = isGroup
                 ? repo.getTodayScheduleForGroup(selName)
                 : repo.getTodayScheduleForTeacher(selName);
+
+        ExcludedSubjectsManager excludedMgr = context != null ? new ExcludedSubjectsManager(context) : null;
+        SkippedLessonsManager skippedMgr = context != null ? new SkippedLessonsManager(context) : null;
+        Set<String> excluded = (excludedMgr != null && isGroup) ? excludedMgr.getExcludedSubjects(selName) : null;
 
         boolean hasRemainingToday = false;
         if (todaySchedule != null && !todaySchedule.isDayOff() && todaySchedule.hasLessons() && todaySchedule.getLessons() != null) {
@@ -220,6 +247,9 @@ public class TodayScheduleWidgetProvider extends AppWidgetProvider {
                 String[][] times = Constants.getLessonTimes(dowToday);
                 for (ScheduleItem it : todaySchedule.getLessons()) {
                     if (it.isCancelled()) continue;
+                    String sub = it.getSubjectName() != null ? it.getSubjectName().trim() : "";
+                    if (excluded != null && excluded.contains(sub)) continue;
+                    if (skippedMgr != null && skippedMgr.isSkipped(today, it.getLessonNumber(), sub)) continue;
                     int n = it.getLessonNumber();
                     if (n >= 1 && n <= times.length) {
                         LocalTime end = LocalTime.parse(times[n - 1][1], TF);

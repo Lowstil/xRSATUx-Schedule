@@ -58,7 +58,7 @@ public class ScheduleWidgetFactory implements RemoteViewsService.RemoteViewsFact
             }
             boolean isGroup = GroupOrTeacher.TYPE_GROUP.equals(selType);
             TodayScheduleWidgetProvider.WidgetScheduleResult res =
-                    TodayScheduleWidgetProvider.resolveWidgetSchedule(repo, selName, isGroup);
+                    TodayScheduleWidgetProvider.resolveWidgetSchedule(context, repo, selName, isGroup);
             targetDate = res.date;
             if (res.daySchedule != null && res.daySchedule.hasLessons() && res.daySchedule.getLessons() != null) {
                 lessons = new ArrayList<>(res.daySchedule.getLessons());
@@ -185,6 +185,6 @@ public class ScheduleWidgetFactory implements RemoteViewsService.RemoteViewsFact
 
     @Override
     public boolean hasStableIds() {
-        return true;
+        return false;
     }
 }

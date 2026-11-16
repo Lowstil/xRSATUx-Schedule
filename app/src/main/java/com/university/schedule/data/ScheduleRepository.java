@@ -1,8 +1,10 @@
 package com.university.schedule.data;
 import android.content.Context;
 import android.util.Log;
+import com.university.schedule.data.db.CustomEventDao;
 import com.university.schedule.data.db.HolidayDao;
 import com.university.schedule.data.db.NoteDao;
+import com.university.schedule.model.CustomEvent;
 import com.university.schedule.model.LessonNote;
 import com.university.schedule.data.db.ScheduleDao;
 import com.university.schedule.data.db.TransferDao;
@@ -49,15 +51,16 @@ private final UserDao userDao;
 private final HolidayDao holidayDao;
 private final TransferDao transferDao;
 private final NoteDao noteDao;
+private final CustomEventDao customEventDao;
 private final NetworkClient networkClient;
 private final ExcelParser excelParser;
 private final TransferParser transferParser;
 private final ExcludedSubjectsManager excludedSubjectsManager;
 private final SkippedLessonsManager skippedLessonsManager;
 private final PrefsManager prefsManager;
-private HolidayChecker holidayChecker;
-private WeekCalculator weekCalculator;
-private ScheduleFilter scheduleFilter;
+private volatile HolidayChecker holidayChecker;
+private volatile WeekCalculator weekCalculator;
+private volatile ScheduleFilter scheduleFilter;
 public static ScheduleRepository getInstance(Context context) {
 if (instance == null) {
 synchronized (ScheduleRepository.class) {
@@ -73,6 +76,7 @@ this.userDao = new UserDao(this.context);
 this.holidayDao = new HolidayDao(this.context);
 this.transferDao = new TransferDao(this.context);
 this.noteDao = new NoteDao(this.context);
+this.customEventDao = new CustomEventDao(this.context);
 this.networkClient = new NetworkClient(this.context);
 this.excelParser = new ExcelParser();
 this.transferParser = new TransferParser();
@@ -228,19 +232,29 @@ return true;
 }
 public WeekSchedule getWeekScheduleForGroup(String group, int week) {
 String wt = (week % 2 == 0) ? Constants.WEEK_TYPE_EVEN : Constants.WEEK_TYPE_ODD;
+LocalDate monday = weekCalculator != null ? weekCalculator.getMondayOfWeek(week) : null;
+if (monday == null) {
+return new WeekSchedule(week, week % 2 == 0);
+}
 List<ScheduleItem> items = scheduleDao.getScheduleForGroup(group, wt);
-LocalDate monday = weekCalculator.getMondayOfWeek(week);
 LocalDate saturday = monday.plusDays(5);
 List<TransferItem> transfers = transferDao.getForDateRange(monday.toString(), saturday.toString());
-return scheduleFilter.buildWeekSchedule(items, week, wt, monday, transfers, group, true);
+WeekSchedule ws = scheduleFilter.buildWeekSchedule(items, week, wt, monday, transfers, group, true);
+mergeCustomEventsIntoWeek(ws, group, true, wt);
+return ws;
 }
 public WeekSchedule getWeekScheduleForTeacher(String teacher, int week) {
 String wt = (week % 2 == 0) ? Constants.WEEK_TYPE_EVEN : Constants.WEEK_TYPE_ODD;
+LocalDate monday = weekCalculator != null ? weekCalculator.getMondayOfWeek(week) : null;
+if (monday == null) {
+return new WeekSchedule(week, week % 2 == 0);
+}
 List<ScheduleItem> items = scheduleDao.getScheduleForTeacher(teacher, wt);
-LocalDate monday = weekCalculator.getMondayOfWeek(week);
 LocalDate saturday = monday.plusDays(5);
 List<TransferItem> transfers = transferDao.getForDateRange(monday.toString(), saturday.toString());
-return scheduleFilter.buildWeekSchedule(items, week, wt, monday, transfers, teacher, false);
+WeekSchedule ws = scheduleFilter.buildWeekSchedule(items, week, wt, monday, transfers, teacher, false);
+mergeCustomEventsIntoWeek(ws, teacher, false, wt);
+return ws;
 }
 public DaySchedule getTodayScheduleForGroup(String group) {
 return todayFor(group, true);
@@ -279,7 +293,9 @@ List<ScheduleItem> items = group
 ? scheduleDao.getScheduleForGroup(name, wt)
 : scheduleDao.getScheduleForTeacher(name, wt);
 List<TransferItem> transfers = transferDao.getForDate(today.toString());
-return scheduleFilter.buildDaySchedule(items, dow, week, wt, today, transfers, name, group);
+DaySchedule day = scheduleFilter.buildDaySchedule(items, dow, week, wt, today, transfers, name, group);
+mergeCustomEventsIntoDay(day, customEventDao.getForTarget(name, group), wt);
+return day;
 }
 /**
 Задача: «Следующая пара» по реальному расписанию.
@@ -297,6 +313,7 @@ public NextLesson findNextLesson(String name, boolean group, LocalDate fromDate,
 LocalTime afterTime, int maxDays) {
 if (name == null || fromDate == null) return null;
 DateTimeFormatter tf = DateTimeFormatter.ofPattern("H:mm");
+List<CustomEvent> customEvents = customEventDao.getForTarget(name, group);
 // Начинаем поиск с текущего дня, но если сегодня выходной или нет пар,
 // то ищем в последующих днях
 for (int k = 0; k < maxDays; k++) {
@@ -312,6 +329,7 @@ List<ScheduleItem> items = group
 List<TransferItem> transfers = transferDao.getForDate(date.toString());
 DaySchedule day = scheduleFilter.buildDaySchedule(items, dow, week, wt, date, transfers, name, group);
 if (day.isDayOff()) continue; // праздничный выходной
+mergeCustomEventsIntoDay(day, customEvents, wt);
 // Проверяем наличие занятий: учитываем как обычные пары, так и добавленные переносом
 List<ScheduleItem> lessons = day.getLessons();
 if (lessons == null || lessons.isEmpty()) continue;
@@ -377,9 +395,9 @@ public String getSelectionName() {
 return prefsManager.getSelectionName();
 }
 public void updateSemesterStart(LocalDate start) {
-
-
-
+if (start != null) {
+prefsManager.saveSemesterStart(start);
+}
 userDao.updateSemesterStart(start);
 refreshLogic();
 }
@@ -392,6 +410,9 @@ return s != null ? new SemesterInfo(s) : null;
 }
 public WeekCalculator getWeekCalculator() {
 return weekCalculator;
+}
+public HolidayChecker getHolidayChecker() {
+return holidayChecker;
 }
 public String getLastUpdated() {
 return prefsManager.getLastUpdated();
@@ -417,6 +438,45 @@ return scheduleDao.getScheduleForGroup(group, weekType);
 public List<TransferItem> getTransfersForDate(String date) {
 return transferDao.getForDate(date);
 }
+public List<TransferItem> getTransfersForDateRange(String fromIso, String toIso) {
+return transferDao.getForDateRange(fromIso, toIso);
+}
+public List<CustomEvent> getCustomEvents() {
+return customEventDao.getAll();
+}
+public long addCustomEvent(CustomEvent e) {
+if (e == null) return -1;
+return customEventDao.insert(e);
+}
+public void deleteCustomEvent(long id) {
+customEventDao.delete(id);
+}
+private void mergeCustomEventsIntoWeek(WeekSchedule ws, String name, boolean isGroup, String weekType) {
+if (ws == null || ws.getDays() == null || name == null) return;
+List<CustomEvent> events = customEventDao.getForTarget(name, isGroup);
+if (events == null || events.isEmpty()) return;
+for (DaySchedule day : ws.getDays()) {
+mergeCustomEventsIntoDay(day, events, weekType);
+}
+}
+private void mergeCustomEventsIntoDay(DaySchedule day, List<CustomEvent> events, String weekType) {
+if (day == null || events == null || events.isEmpty()) return;
+List<ScheduleItem> lessons = day.getLessons();
+if (lessons == null) {
+lessons = new ArrayList<>();
+day.setLessons(lessons);
+}
+boolean added = false;
+for (CustomEvent e : events) {
+if (e.matchesDate(day.getDate(), day.getDayOfWeek(), weekType)) {
+lessons.add(e.toScheduleItem(day.getDayOfWeek()));
+added = true;
+}
+}
+if (added && lessons.size() > 1) {
+Collections.sort(lessons, (a, b) -> Integer.compare(a.getLessonNumber(), b.getLessonNumber()));
+}
+}
 public void deleteNote(String date, int lessonNum) {
 noteDao.delete(date, lessonNum);
 }
@@ -425,6 +485,7 @@ scheduleDao.clearAll();
 userDao.clear();
 holidayDao.clear();
 transferDao.clearAll();
+customEventDao.clearAll();
 networkClient.clearCache();
 prefsManager.clearAll();
 refreshLogic();

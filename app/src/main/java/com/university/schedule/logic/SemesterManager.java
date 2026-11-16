@@ -22,16 +22,18 @@ public static LocalDate getDefaultSemesterStart() {
 LocalDate today = DateUtils.todayMoscow();
 int year = today.getYear();
 int month = today.getMonthValue();
+LocalDate base;
 if (month >= 2 && month <= 8) {
 // Февраль–Август: весенний семестр
-return LocalDate.of(year, 2, 1);
+base = LocalDate.of(year, 2, 1);
 } else if (month >= 9) {
 // Сентябрь–Декабрь: осенний семестр текущего года
-return LocalDate.of(year, 9, 1);
+base = LocalDate.of(year, 9, 1);
 } else {
 // Январь: осенний семестр прошлого года
-return LocalDate.of(year - 1, 9, 1);
+base = LocalDate.of(year - 1, 9, 1);
 }
+return DateUtils.mondayOfWeek(base);
 }
 /**
 * Человекочитаемое описание семестра для настроек.
