@@ -5,12 +5,14 @@ import android.util.Log;
 import com.university.schedule.util.Constants;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URL;
 import java.security.KeyStore;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
@@ -46,6 +48,7 @@ public class NetworkClient {
     private final OkHttpClient client;
     private final Context context;
     private volatile boolean lastFetchFromAssets = false;
+    private volatile String lastDownloadedHash = null;
 
     public NetworkClient(Context context) {
         this.context = context.getApplicationContext();
@@ -124,12 +127,17 @@ public class NetworkClient {
         return lastFetchFromAssets;
     }
 
+    public String getLastDownloadedHash() {
+        return lastDownloadedHash;
+    }
+
     /**
      * Скачивает основное расписание: ищет актуальную ссылку на странице SCHEDULE_PAGE_URL,
      * а если не находит — использует SCHEDULE_FALLBACK_URL.
      */
     public File downloadScheduleSync() throws IOException {
         lastFetchFromAssets = false;
+        lastDownloadedHash = null;
         String resolvedUrl = null;
         try {
             resolvedUrl = discoverScheduleUrl();
@@ -143,7 +151,33 @@ public class NetworkClient {
         // Если кэша ещё нет (первый запуск устройства), разрешаем fallbackToAssets,
         // чтобы приложение гарантированно открылось с расписанием даже при сбоях сети/эмулятора.
         boolean allowAssetsFallback = (getCachedFile() == null);
-        return downloadToCache(resolvedUrl, Constants.CACHE_FILE_NAME, allowAssetsFallback);
+        File file = downloadToCache(resolvedUrl, Constants.CACHE_FILE_NAME, allowAssetsFallback);
+        if (file != null && file.exists()) {
+            lastDownloadedHash = computeSha256Hex(file);
+        }
+        return file;
+    }
+
+    private static String computeSha256Hex(File file) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] buf = new byte[8192];
+            try (InputStream is = new FileInputStream(file)) {
+                int len;
+                while ((len = is.read(buf)) != -1) {
+                    md.update(buf, 0, len);
+                }
+            }
+            byte[] digest = md.digest();
+            StringBuilder sb = new StringBuilder(digest.length * 2);
+            for (byte b : digest) {
+                sb.append(String.format("%02x", b & 0xff));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            Log.w(TAG, "Не удалось вычислить SHA-256 для " + file.getName() + ": " + e.getMessage());
+            return null;
+        }
     }
 
     /**

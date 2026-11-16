@@ -354,10 +354,19 @@
                             android:textSize="12sp" />
 
                         <TextView
-                            android:id="@+id/tvSemesterInfo"
+                            android:id="@+id/tvSelectedSemester"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="4dp"
+                            android:textColor="@color/glass_accent"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvSemesterInfo"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
                             android:textColor="@color/glass_text_primary"
                             android:textSize="16sp" />
 

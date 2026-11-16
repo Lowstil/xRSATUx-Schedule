@@ -1,6 +1,7 @@
 package com.university.schedule.util;
 import android.content.Context;
 import android.content.SharedPreferences;
+import com.university.schedule.logic.SemesterManager;
 import java.time.LocalDate;
 public class PrefsManager {
     private final SharedPreferences prefs;
@@ -20,11 +21,95 @@ public class PrefsManager {
     }
     public String getSelectionType() { return prefs.getString(Constants.PREF_SELECTION_TYPE, null); }
     public String getSelectionName() { return prefs.getString(Constants.PREF_SELECTION_NAME, null); }
-    public void saveSemesterStart(LocalDate date) {
-        prefs.edit().putString(Constants.PREF_SEMESTER_START, DateUtils.toIsoString(date)).apply();
+    public static final String PREF_ACTIVE_SEMESTER = "active_semester";
+    private static final String PREF_SEMESTER_START_PREFIX = "semester_start_";
+    private static final String PREF_SEMESTER_HASH_PREFIX = "semester_hash_";
+    private static final String PREF_SEMESTER_PUBLISHED_PREFIX = "semester_published_";
+
+    public String getActiveSemester() {
+        String stored = prefs.getString(PREF_ACTIVE_SEMESTER, null);
+        if (SemesterManager.SEMESTER_FALL.equals(stored) || SemesterManager.SEMESTER_SPRING.equals(stored)) {
+            return stored;
+        }
+        return SemesterManager.getCurrentWindowSemester(DateUtils.todayMoscow());
     }
+
+    public void setActiveSemester(String semesterId) {
+        if (!SemesterManager.SEMESTER_FALL.equals(semesterId)
+                && !SemesterManager.SEMESTER_SPRING.equals(semesterId)) {
+            return;
+        }
+        prefs.edit().putString(PREF_ACTIVE_SEMESTER, semesterId).apply();
+    }
+
+    public void saveSemesterStart(String semesterId, LocalDate date) {
+        if (semesterId == null) return;
+        SharedPreferences.Editor editor = prefs.edit();
+        if (date == null) {
+            editor.remove(PREF_SEMESTER_START_PREFIX + semesterId);
+        } else {
+            editor.putString(PREF_SEMESTER_START_PREFIX + semesterId, DateUtils.toIsoString(date));
+        }
+        if (semesterId.equals(getActiveSemester())) {
+            if (date == null) {
+                editor.remove(Constants.PREF_SEMESTER_START);
+            } else {
+                editor.putString(Constants.PREF_SEMESTER_START, DateUtils.toIsoString(date));
+            }
+        }
+        editor.apply();
+    }
+
+    public LocalDate getSemesterStart(String semesterId) {
+        if (semesterId == null) return null;
+        LocalDate perSem = DateUtils.parseIsoDate(
+                prefs.getString(PREF_SEMESTER_START_PREFIX + semesterId, null));
+        if (perSem != null) return perSem;
+        LocalDate legacy = DateUtils.parseIsoDate(
+                prefs.getString(Constants.PREF_SEMESTER_START, null));
+        if (legacy != null) {
+            int m = legacy.getMonthValue();
+            boolean legacyIsFall = (m >= 8 || m == 1);
+            if ((SemesterManager.SEMESTER_FALL.equals(semesterId) && legacyIsFall)
+                    || (SemesterManager.SEMESTER_SPRING.equals(semesterId) && !legacyIsFall)) {
+                return legacy;
+            }
+        }
+        return null;
+    }
+
+    public void saveSemesterHash(String semesterId, String sha256) {
+        if (semesterId == null) return;
+        SharedPreferences.Editor editor = prefs.edit();
+        if (sha256 == null) {
+            editor.remove(PREF_SEMESTER_HASH_PREFIX + semesterId);
+        } else {
+            editor.putString(PREF_SEMESTER_HASH_PREFIX + semesterId, sha256);
+        }
+        editor.apply();
+    }
+
+    public String getSemesterHash(String semesterId) {
+        if (semesterId == null) return null;
+        return prefs.getString(PREF_SEMESTER_HASH_PREFIX + semesterId, null);
+    }
+
+    public void setSemesterPublished(String semesterId, boolean published) {
+        if (semesterId == null) return;
+        prefs.edit().putBoolean(PREF_SEMESTER_PUBLISHED_PREFIX + semesterId, published).apply();
+    }
+
+    public boolean isSemesterPublished(String semesterId) {
+        if (semesterId == null) return false;
+        return prefs.getBoolean(PREF_SEMESTER_PUBLISHED_PREFIX + semesterId, false);
+    }
+
+    public void saveSemesterStart(LocalDate date) {
+        saveSemesterStart(getActiveSemester(), date);
+    }
+
     public LocalDate getSemesterStart() {
-        return DateUtils.parseIsoDate(prefs.getString(Constants.PREF_SEMESTER_START, null));
+        return getSemesterStart(getActiveSemester());
     }
     public void saveLastUpdated(String iso) {
         prefs.edit().putString(Constants.PREF_LAST_UPDATED, iso).apply();

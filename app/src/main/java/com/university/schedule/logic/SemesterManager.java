@@ -17,45 +17,83 @@ import java.time.LocalDate;
 *   Январь           -> осенний прошлого года (1 сентября прошлого года)
 */
 public final class SemesterManager {
-private SemesterManager() { }
-public static LocalDate getDefaultSemesterStart() {
-LocalDate today = DateUtils.todayMoscow();
-int year = today.getYear();
-int month = today.getMonthValue();
-LocalDate base;
-if (month >= 2 && month <= 8) {
-// Февраль–Август: весенний семестр
-base = LocalDate.of(year, 2, 1);
-} else if (month >= 9) {
-// Сентябрь–Декабрь: осенний семестр текущего года
-base = LocalDate.of(year, 9, 1);
-} else {
-// Январь: осенний семестр прошлого года
-base = LocalDate.of(year - 1, 9, 1);
-}
-return DateUtils.mondayOfWeek(base);
-}
-/**
-* Человекочитаемое описание семестра для настроек.
-* Пример: "Осенний семестр 2026/2027, начался 1 сентября 2026"
-*/
-public static String describeSemester(SemesterInfo info) {
-if (info == null || info.getStartDate() == null) return "Семестр не задан";
-LocalDate start = info.getStartDate();
-int year = start.getYear();
-int month = start.getMonthValue();
-String semesterName;
-String academicYear;
-if (month >= 2 && month <= 8) {
-semesterName = "Весенний семестр";
-academicYear = year + "/" + (year + 1);
-} else if (month >= 9) {
-semesterName = "Осенний семестр";
-academicYear = year + "/" + (year + 1);
-} else {
-semesterName = "Осенний семестр";
-academicYear = (year - 1) + "/" + year;
-}
-return semesterName + " " + academicYear + " уч.г., начался " + DateUtils.formatDisplayDate(start);
-}
+    public static final String SEMESTER_FALL = "fall";
+    public static final String SEMESTER_SPRING = "spring";
+
+    private SemesterManager() { }
+
+    /**
+     * Определяет семестр по календарному окну:
+     * весенний — с 30 января по 24 августа включительно;
+     * осенний — с 25 августа по 29 января включительно.
+     */
+    public static String getCurrentWindowSemester(LocalDate today) {
+        LocalDate d = today != null ? today : DateUtils.todayMoscow();
+        int month = d.getMonthValue();
+        int day = d.getDayOfMonth();
+        if ((month == 1 && day >= 30) || (month >= 2 && month <= 7) || (month == 8 && day < 25)) {
+            return SEMESTER_SPRING;
+        }
+        return SEMESTER_FALL;
+    }
+
+    /**
+     * Возвращает дату начала указанного семестра (понедельник первой учебной недели)
+     * относительно referenceDate.
+     */
+    public static LocalDate getDefaultStartForSemester(String semesterId, LocalDate referenceDate) {
+        LocalDate ref = referenceDate != null ? referenceDate : DateUtils.todayMoscow();
+        int year = ref.getYear();
+        int month = ref.getMonthValue();
+        LocalDate base;
+        if (SEMESTER_SPRING.equals(semesterId)) {
+            int springYear = (month >= 8) ? (year + 1) : year;
+            base = LocalDate.of(springYear, 2, 1);
+        } else {
+            int fallYear = (month < 8) ? (year - 1) : year;
+            base = LocalDate.of(fallYear, 9, 1);
+        }
+        return DateUtils.mondayOfWeek(base);
+    }
+
+    public static LocalDate getDefaultSemesterStart() {
+        LocalDate today = DateUtils.todayMoscow();
+        return getDefaultStartForSemester(getCurrentWindowSemester(today), today);
+    }
+
+    /**
+     * Человекочитаемое название семестра и учебного года, например:
+     * "Осенний семестр 2026/2027" или "Весенний семестр 2026/2027".
+     */
+    public static String describeSemester(String semesterId, LocalDate startDate) {
+        boolean isSpring = SEMESTER_SPRING.equals(semesterId);
+        String semesterName = isSpring ? "Весенний семестр" : "Осенний семестр";
+        if (startDate == null) {
+            return semesterName;
+        }
+        int year = startDate.getYear();
+        int month = startDate.getMonthValue();
+        String academicYear;
+        if (isSpring) {
+            academicYear = (month >= 8) ? (year + "/" + (year + 1)) : ((year - 1) + "/" + year);
+        } else {
+            academicYear = (month >= 8) ? (year + "/" + (year + 1)) : ((year - 1) + "/" + year);
+        }
+        return semesterName + " " + academicYear;
+    }
+
+    /**
+     * Человекочитаемое описание семестра для настроек.
+     * Пример: "Осенний семестр 2026/2027 уч.г., начался 31.08.2026"
+     */
+    public static String describeSemester(SemesterInfo info) {
+        if (info == null || info.getStartDate() == null) return "Семестр не задан";
+        LocalDate start = info.getStartDate();
+        int month = start.getMonthValue();
+        int day = start.getDayOfMonth();
+        String semId = ((month == 8 && day >= 25) || month >= 9 || (month == 1 && day < 25))
+                ? SEMESTER_FALL
+                : SEMESTER_SPRING;
+        return describeSemester(semId, start) + " уч.г., начался " + DateUtils.formatDisplayDate(start);
+    }
 }

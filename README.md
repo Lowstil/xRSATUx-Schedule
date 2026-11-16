@@ -96,7 +96,12 @@
 - Выбор любой второй группы или преподавателя для наложения расписаний на выбранный день или неделю.
 - Автоматический подсчёт и подсветка **общих свободных окон**, когда обе группы не заняты, чтобы легко договориться о встрече или совместной подготовке.
 
-> **Обновление 3.2:** также включает комплексные исправления стабильности и производительности (атомарное обновление БД, оптимизация свайпов и прокрутки, безопасная работа фоновых сервисов и уведомлений).
+### 14. 🌸🍂 Два семестра в единой ленте и автопереход (`SemesterManager`)
+- **Единая 36-недельная лента:** Осень (недели 1–18) и Весна (недели 1–18), всего **216 страниц** в `ViewPager2`. Бесшовное переключение между семестрами свайпом и кнопками `<` / `>` сопровождается всплывающей стеклянной плашкой (`🌸 Весенний семестр` / `🍂 Осенний семестр`).
+- **Раздельное хранение в SQLite:** `DatabaseHelper` v6 хранит осеннее и весеннее расписания раздельно по `semester_id`.
+- **Автопереход и проверка публикации:** автоматический переход после **30 января** (весна) и **25 августа** (осень) по SHA-256 хэшу файла с `rsatu.ru`, а также заглушка неопубликованного семестра с кнопкой **«Проверить сейчас»**.
+
+> **Обновление 3.3:** единая 36-недельная лента двух семестров, раздельное хранение в SQLite (`DatabaseHelper` v6), автопереход по SHA-256 и заглушка неопубликованного семестра.
 
 ---
 
@@ -109,9 +114,9 @@
   * `ui/view` — кастомные компоненты (`CircularProgressRingView`)
   * `ui/controller` — контроллеры состояния экрана (`WeekScheduleController`)
   * `ui/activity`, `ui/adapter`, `ui/dialog` — экраны, `ViewPager2`-адаптер, карточки, диалоги (`HomeworkHubDialog`, `BuildingInfoDialog`, `CustomEventDialog`, `CompareScheduleDialog` и др.)
-  * `data/db` — локальная SQLite БД (`ScheduleDao`, `TransferDao`, `NoteDao`, `CustomEventDao`, `HolidayDao`, `UserDao`)
+  * `data/db` — локальная SQLite БД (`DatabaseHelper` v6 с `semester_id`, `ScheduleDao`, `TransferDao`, `NoteDao`, `CustomEventDao`, `HolidayDao`, `UserDao`)
   * `data` — сетевой клиент с trust-конфигурацией для `rsatu.ru`, парсеры `.xlsx` и переносов, `ScheduleRepository`
-  * `logic` — расчёт недель семестра (`WeekCalculator`), фильтрация и сортировка (`ScheduleFilter`), праздники (`HolidayChecker`)
+  * `logic` — управление семестрами (`SemesterManager`), расчёт недель (`WeekCalculator`), фильтрация и сортировка (`ScheduleFilter`), праздники (`HolidayChecker`)
   * `model` — модели расписания, заметок, переносов и `ScheduleDiff`
   * `notification` — `LiveLessonService`, `ReminderScheduler`, `ReminderReceiver`, `MorningDigestReceiver`, `BootReceiver`
   * `widget` — `CompactScheduleWidgetProvider`, `TodayScheduleWidgetProvider`, `ScheduleWidgetService`, `ScheduleWidgetFactory`
@@ -124,7 +129,7 @@
   * `androidx.swiperefreshlayout:swiperefreshlayout:1.1.0`
   * `org.apache.poi:poi-ooxml:5.2.5` — потоковый парсинг `.xlsx` файлов расписания
   * `com.squareup.okhttp3:okhttp:4.12.0` — сетевая загрузка файлов
-  * `junit:junit:4.13.2` — 62+ unit-теста логики времени, фильтрации, парсинга и бюджета пропусков
+  * `junit:junit:4.13.2` — 66+ unit-тестов логики семестров (`SemesterManagerTest`), времени, фильтрации, парсинга и бюджета пропусков
 
 ---
 

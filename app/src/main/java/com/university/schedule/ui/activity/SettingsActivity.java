@@ -34,6 +34,7 @@ import com.google.android.material.textfield.TextInputEditText;
 import com.university.schedule.R;
 import com.university.schedule.data.ScheduleRepository;
 import com.university.schedule.logic.SemesterManager;
+import com.university.schedule.logic.WeekCalculator;
 import com.university.schedule.notification.LiveLessonService;
 import com.university.schedule.notification.ReminderScheduler;
 import com.university.schedule.ui.dialog.BellScheduleDialog;
@@ -67,7 +68,7 @@ public class SettingsActivity extends AppCompatActivity {
     private PrefsManager prefs;
     private ExcludedSubjectsManager excludedManager;
     private final ExecutorService ex = Executors.newSingleThreadExecutor();
-    private TextView tvSel, tvSem, tvUpd, tvTransfersUpd;
+    private TextView tvSel, tvSelectedSemester, tvSem, tvUpd, tvTransfersUpd;
     private MaterialButton btnRefresh;
     private MaterialButtonToggleGroup toggleTheme;
     private SwitchMaterial switchLessonReminder, switchMorningDigest, switchLiveLessonNotif, switchReducedTransparency;
@@ -103,6 +104,7 @@ public class SettingsActivity extends AppCompatActivity {
         toolbar.setNavigationOnClickListener(v -> finish());
 
         tvSel = findViewById(R.id.tvCurrentSelection);
+        tvSelectedSemester = findViewById(R.id.tvSelectedSemester);
         tvSem = findViewById(R.id.tvSemesterInfo);
         tvUpd = findViewById(R.id.tvLastUpdated);
         tvTransfersUpd = findViewById(R.id.tvTransfersLastUpdated);
@@ -262,7 +264,18 @@ public class SettingsActivity extends AppCompatActivity {
         String t = repo.getSelectionType();
         String n = repo.getSelectionName();
         tvSel.setText(("group".equals(t) ? "Группа" : "Преподаватель") + ": " + (n != null ? n : "—"));
-        tvSem.setText(SemesterManager.describeSemester(repo.getSemesterInfo()));
+        String activeSemId = repo.getActiveSemesterId();
+        if (activeSemId == null) activeSemId = SemesterManager.SEMESTER_FALL;
+        boolean isSpring = SemesterManager.SEMESTER_SPRING.equals(activeSemId);
+        if (tvSelectedSemester != null) {
+            tvSelectedSemester.setText("Выбранный семестр: " + (isSpring ? "Весна" : "Осень"));
+        }
+        WeekCalculator semCalc = repo.getWeekCalculator(activeSemId);
+        LocalDate semStart = semCalc != null ? semCalc.getMondayOfWeek(1) : null;
+        if (semStart == null) {
+            semStart = SemesterManager.getDefaultStartForSemester(activeSemId, DateUtils.todayMoscow());
+        }
+        tvSem.setText(SemesterManager.describeSemester(activeSemId, semStart));
         LocalDateTime ldt = DateUtils.parseIsoDateTime(repo.getLastUpdated());
         tvUpd.setText(ldt != null ? "Расписание обновлено: " + ldt.format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")) : "Расписание ещё не обновлялось");
         LocalDateTime tldt = DateUtils.parseIsoDateTime(repo.getTransfersLastUpdated());
@@ -271,13 +284,19 @@ public class SettingsActivity extends AppCompatActivity {
 
     private void pickDate() {
         if (isFinishing() || isDestroyed()) return;
-        LocalDate cur = repo.getSemesterStart();
-        if (cur == null) cur = SemesterManager.getDefaultSemesterStart();
+        final String activeSemId = repo.getActiveSemesterId() != null
+                ? repo.getActiveSemesterId()
+                : SemesterManager.SEMESTER_FALL;
+        WeekCalculator semCalc = repo.getWeekCalculator(activeSemId);
+        LocalDate cur = semCalc != null ? semCalc.getMondayOfWeek(1) : null;
+        if (cur == null) {
+            cur = SemesterManager.getDefaultStartForSemester(activeSemId, DateUtils.todayMoscow());
+        }
         DatePickerDialog dpd = new DatePickerDialog(this, R.style.ThemeOverlay_UniSchedule_DatePicker, (v, y, m, d) -> {
             LocalDate sel = LocalDate.of(y, m + 1, d);
             LocalDate mon = DateUtils.mondayOfWeek(sel);
             if (mon.isAfter(sel)) mon = mon.minusWeeks(1);
-            repo.updateSemesterStart(mon);
+            repo.updateSemesterStart(activeSemId, mon);
             updateInfo();
             Toast.makeText(this, "Начало семестра: " + DateUtils.formatDisplayDate(mon), Toast.LENGTH_SHORT).show();
         }, cur.getYear(), cur.getMonthValue() - 1, cur.getDayOfMonth());

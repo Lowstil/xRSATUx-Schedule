@@ -34,6 +34,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         db.execSQL(ScheduleContract.SQL_CREATE_SCHEDULE);
         db.execSQL(ScheduleContract.SQL_CREATE_INDEX_GROUP);
         db.execSQL(ScheduleContract.SQL_CREATE_INDEX_TEACHER);
+        db.execSQL(ScheduleContract.SQL_CREATE_INDEX_SEMESTER);
         db.execSQL(ScheduleContract.SQL_CREATE_HOLIDAYS);
         db.execSQL(ScheduleContract.SQL_CREATE_TRANSFERS);
         db.execSQL(ScheduleContract.SQL_CREATE_INDEX_TRANSFERS);
@@ -51,22 +52,31 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
         Log.d(TAG, "Обновление БД " + oldVersion + " -> " + newVersion);
-        db.execSQL(ScheduleContract.SQL_DELETE_SCHEDULE);
-        db.execSQL(ScheduleContract.SQL_DELETE_USER_SETTINGS);
-        db.execSQL(ScheduleContract.SQL_DELETE_HOLIDAYS);
-        db.execSQL(ScheduleContract.SQL_DELETE_TRANSFERS);
-        onCreate(db);
-        if (oldVersion < 4) {
-            try {
-                db.execSQL("ALTER TABLE " + ScheduleContract.NoteEntry.TABLE_NAME +
-                        " ADD COLUMN " + ScheduleContract.NoteEntry.COLUMN_IMAGE_PATH + " TEXT");
-            } catch (Exception e) {
-                Log.w(TAG, "Колонка image_path уже существует или не может быть добавлена: " + e.getMessage());
-            }
-        }
         if (oldVersion < 5) {
-            db.execSQL(ScheduleContract.SQL_CREATE_CUSTOM_EVENTS);
-            db.execSQL(ScheduleContract.SQL_CREATE_INDEX_CUSTOM_EVENTS);
+            db.execSQL(ScheduleContract.SQL_DELETE_SCHEDULE);
+            db.execSQL(ScheduleContract.SQL_DELETE_USER_SETTINGS);
+            db.execSQL(ScheduleContract.SQL_DELETE_HOLIDAYS);
+            db.execSQL(ScheduleContract.SQL_DELETE_TRANSFERS);
+            onCreate(db);
+            if (oldVersion < 4) {
+                try {
+                    db.execSQL("ALTER TABLE " + ScheduleContract.NoteEntry.TABLE_NAME +
+                            " ADD COLUMN " + ScheduleContract.NoteEntry.COLUMN_IMAGE_PATH + " TEXT");
+                } catch (Exception e) {
+                    Log.w(TAG, "Колонка image_path уже существует или не может быть добавлена: " + e.getMessage());
+                }
+            }
+            return;
+        }
+        if (oldVersion < 6) {
+            try {
+                db.execSQL("ALTER TABLE " + ScheduleContract.ScheduleEntry.TABLE_NAME +
+                        " ADD COLUMN " + ScheduleContract.ScheduleEntry.COLUMN_SEMESTER_ID +
+                        " TEXT NOT NULL DEFAULT 'fall'");
+            } catch (Exception e) {
+                Log.w(TAG, "Колонка semester_id уже существует или не может быть добавлена: " + e.getMessage());
+            }
+            db.execSQL(ScheduleContract.SQL_CREATE_INDEX_SEMESTER);
         }
     }
 

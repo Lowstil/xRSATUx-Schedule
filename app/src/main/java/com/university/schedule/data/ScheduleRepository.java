@@ -88,21 +88,56 @@ initLogic();
 private void initLogic() {
 List<Holiday> extra = holidayDao.getAll();
 this.holidayChecker = new HolidayChecker(extra);
-LocalDate start = prefsManager.getSemesterStart();
+String activeSem = getActiveSemesterId();
+LocalDate start = prefsManager.getSemesterStart(activeSem);
 LocalDate today = DateUtils.todayMoscow();
-if (start == null || !isWithinSemester(start, today)) {
-LocalDate rolled = SemesterManager.getDefaultSemesterStart();
-if (rolled != null && (start == null || isWithinSemester(rolled, today) || !isWithinSemester(start, today))) {
-start = rolled;
-prefsManager.saveSemesterStart(start);
-
-
-
-Log.d(TAG, "Начало семестра актуализировано: " + start);
+if (start == null) {
+start = SemesterManager.getDefaultStartForSemester(activeSem, today);
+prefsManager.saveSemesterStart(activeSem, start);
+Log.d(TAG, "Начало семестра " + activeSem + " инициализировано: " + start);
 }
+if (scheduleDao.hasDataForSemester(SemesterManager.SEMESTER_FALL)
+&& !prefsManager.isSemesterPublished(SemesterManager.SEMESTER_FALL)) {
+prefsManager.setSemesterPublished(SemesterManager.SEMESTER_FALL, true);
 }
 this.weekCalculator = new WeekCalculator(new SemesterInfo(start));
 this.scheduleFilter = new ScheduleFilter(holidayChecker);
+}
+
+public String getActiveSemesterId() {
+return prefsManager.getActiveSemester();
+}
+
+public void setActiveSemesterId(String semesterId) {
+String sem = (SemesterManager.SEMESTER_SPRING.equals(semesterId))
+? SemesterManager.SEMESTER_SPRING
+: SemesterManager.SEMESTER_FALL;
+prefsManager.setActiveSemester(sem);
+LocalDate start = prefsManager.getSemesterStart(sem);
+if (start == null) {
+start = SemesterManager.getDefaultStartForSemester(sem, DateUtils.todayMoscow());
+prefsManager.saveSemesterStart(sem, start);
+}
+this.weekCalculator = new WeekCalculator(new SemesterInfo(start));
+userDao.updateSemesterStart(start);
+com.university.schedule.widget.WidgetUpdateHelper.updateAllWidgets(context);
+}
+
+public boolean isSemesterPublished(String semesterId) {
+if (semesterId == null) return false;
+return prefsManager.isSemesterPublished(semesterId) || scheduleDao.hasDataForSemester(semesterId);
+}
+
+public WeekCalculator getWeekCalculator(String semesterId) {
+String sem = (SemesterManager.SEMESTER_SPRING.equals(semesterId))
+? SemesterManager.SEMESTER_SPRING
+: SemesterManager.SEMESTER_FALL;
+LocalDate start = prefsManager.getSemesterStart(sem);
+if (start == null) {
+start = SemesterManager.getDefaultStartForSemester(sem, DateUtils.todayMoscow());
+prefsManager.saveSemesterStart(sem, start);
+}
+return new WeekCalculator(new SemesterInfo(start));
 }
 private static boolean isWithinSemester(LocalDate start, LocalDate date) {
 if (start == null || date == null) return false;
@@ -117,8 +152,9 @@ public void loadScheduleFromNetwork(LoadCallback cb) {
 try {
 cb.onProgress("Загрузка файла расписания...");
 File file = networkClient.downloadScheduleSync();
+String newHash = networkClient.getLastDownloadedHash();
 cb.onProgress("Обработка файла...");
-parseAndSave(file, cb);
+parseAndSave(file, cb, newHash);
 if (!networkClient.lastFetchFromAssets()) prefsManager.saveLastUpdated(DateUtils.nowIsoDateTime());
 userDao.touchLastUpdated();
 try {
@@ -158,6 +194,10 @@ prefsManager.saveLastAutoRefreshAttempt(DateUtils.nowIsoDateTime());
 loadScheduleFromNetwork(cb);
 }
 public void parseAndSave(File xlsx, LoadCallback cb) throws Exception {
+parseAndSave(xlsx, cb, networkClient.getLastDownloadedHash());
+}
+
+public void parseAndSave(File xlsx, LoadCallback cb, String newHash) throws Exception {
 List<ScheduleItem> all = new ArrayList<>();
 try (FileInputStream is = new FileInputStream(xlsx)) {
 all.addAll(excelParser.parseGroups(is));
@@ -170,17 +210,31 @@ Log.w(TAG, "Лист преподавателей не распознан: " + e
 if (all.isEmpty()) {
 throw new IllegalStateException("Файл расписания распознан пустым (0 записей) — существующие данные не затёрты");
 }
+LocalDate today = DateUtils.todayMoscow();
+String windowSem = SemesterManager.getCurrentWindowSemester(today);
+String targetSem = resolveTargetSemesterForDownload(windowSem, today, newHash);
+boolean wasTargetPublished = isSemesterPublished(targetSem);
+
 cb.onProgress("Сохранение в БД (" + all.size() + " записей)...");
 List<ScheduleItem> oldSnapshot = null;
 String selType = prefsManager.getSelectionType();
 String selName = prefsManager.getSelectionName();
-boolean trackDiff = prefsManager.hasSelection() && !scheduleDao.isEmpty() && selName != null && !selName.isEmpty();
+boolean trackDiff = prefsManager.hasSelection()
+&& scheduleDao.hasDataForSemester(targetSem)
+&& selName != null && !selName.isEmpty();
 if (trackDiff) {
-oldSnapshot = loadSelectionSnapshot(selType, selName);
+oldSnapshot = loadSelectionSnapshot(selType, selName, targetSem);
 }
-scheduleDao.replaceAll(all);
+scheduleDao.replaceForSemester(targetSem, all);
+if (newHash != null) {
+prefsManager.saveSemesterHash(targetSem, newHash);
+}
+prefsManager.setSemesterPublished(targetSem, true);
+if (targetSem.equals(windowSem) && !wasTargetPublished) {
+setActiveSemesterId(targetSem);
+}
 if (trackDiff && oldSnapshot != null && !oldSnapshot.isEmpty()) {
-List<ScheduleItem> newSnapshot = loadSelectionSnapshot(selType, selName);
+List<ScheduleItem> newSnapshot = loadSelectionSnapshot(selType, selName, targetSem);
 ScheduleDiff diff = ScheduleDiff.compute(selType, selName, oldSnapshot, newSnapshot);
 if (diff.hasChanges()) {
 String json = diff.toJson();
@@ -191,15 +245,40 @@ prefsManager.saveScheduleDiffJson(json);
 }
 }
 
-private List<ScheduleItem> loadSelectionSnapshot(String selType, String selName) {
+private String resolveTargetSemesterForDownload(String windowSem, LocalDate today, String newHash) {
+if (isSemesterPublished(windowSem)) {
+return windowSem;
+}
+String otherSem = SemesterManager.SEMESTER_SPRING.equals(windowSem)
+? SemesterManager.SEMESTER_FALL
+: SemesterManager.SEMESTER_SPRING;
+String otherHash = prefsManager.getSemesterHash(otherSem);
+if (otherHash != null) {
+if (newHash != null && !newHash.equals(otherHash)) {
+return windowSem;
+}
+// На rsatu.ru всё ещё лежит файл предыдущего семестра — не загрязняем новый семестр
+return otherSem;
+}
+// Хэша предыдущего семестра ещё нет (первая установка или апгрейд с v5)
+if (SemesterManager.SEMESTER_SPRING.equals(windowSem)) {
+return (today.getMonthValue() >= 2) ? SemesterManager.SEMESTER_SPRING : SemesterManager.SEMESTER_FALL;
+} else {
+return (today.getMonthValue() >= 9 || today.getMonthValue() == 1)
+? SemesterManager.SEMESTER_FALL
+: SemesterManager.SEMESTER_SPRING;
+}
+}
+
+private List<ScheduleItem> loadSelectionSnapshot(String selType, String selName, String semesterId) {
 List<ScheduleItem> snapshot = new ArrayList<>();
 boolean isGroup = "group".equals(selType);
 if (isGroup) {
-snapshot.addAll(scheduleDao.getScheduleForGroup(selName, Constants.WEEK_TYPE_ODD));
-snapshot.addAll(scheduleDao.getScheduleForGroup(selName, Constants.WEEK_TYPE_EVEN));
+snapshot.addAll(scheduleDao.getScheduleForGroup(selName, Constants.WEEK_TYPE_ODD, semesterId));
+snapshot.addAll(scheduleDao.getScheduleForGroup(selName, Constants.WEEK_TYPE_EVEN, semesterId));
 } else {
-snapshot.addAll(scheduleDao.getScheduleForTeacher(selName, Constants.WEEK_TYPE_ODD));
-snapshot.addAll(scheduleDao.getScheduleForTeacher(selName, Constants.WEEK_TYPE_EVEN));
+snapshot.addAll(scheduleDao.getScheduleForTeacher(selName, Constants.WEEK_TYPE_ODD, semesterId));
+snapshot.addAll(scheduleDao.getScheduleForTeacher(selName, Constants.WEEK_TYPE_EVEN, semesterId));
 }
 return snapshot;
 }
@@ -231,25 +310,36 @@ Log.w(TAG, "Ошибка чтения кэша переносов (не крит
 return true;
 }
 public WeekSchedule getWeekScheduleForGroup(String group, int week) {
+return getWeekScheduleForGroup(group, week, getActiveSemesterId());
+}
+
+public WeekSchedule getWeekScheduleForGroup(String group, int week, String semesterId) {
 String wt = (week % 2 == 0) ? Constants.WEEK_TYPE_EVEN : Constants.WEEK_TYPE_ODD;
-LocalDate monday = weekCalculator != null ? weekCalculator.getMondayOfWeek(week) : null;
+WeekCalculator calc = getWeekCalculator(semesterId);
+LocalDate monday = calc != null ? calc.getMondayOfWeek(week) : null;
 if (monday == null) {
 return new WeekSchedule(week, week % 2 == 0);
 }
-List<ScheduleItem> items = scheduleDao.getScheduleForGroup(group, wt);
+List<ScheduleItem> items = scheduleDao.getScheduleForGroup(group, wt, semesterId);
 LocalDate saturday = monday.plusDays(5);
 List<TransferItem> transfers = transferDao.getForDateRange(monday.toString(), saturday.toString());
 WeekSchedule ws = scheduleFilter.buildWeekSchedule(items, week, wt, monday, transfers, group, true);
 mergeCustomEventsIntoWeek(ws, group, true, wt);
 return ws;
 }
+
 public WeekSchedule getWeekScheduleForTeacher(String teacher, int week) {
+return getWeekScheduleForTeacher(teacher, week, getActiveSemesterId());
+}
+
+public WeekSchedule getWeekScheduleForTeacher(String teacher, int week, String semesterId) {
 String wt = (week % 2 == 0) ? Constants.WEEK_TYPE_EVEN : Constants.WEEK_TYPE_ODD;
-LocalDate monday = weekCalculator != null ? weekCalculator.getMondayOfWeek(week) : null;
+WeekCalculator calc = getWeekCalculator(semesterId);
+LocalDate monday = calc != null ? calc.getMondayOfWeek(week) : null;
 if (monday == null) {
 return new WeekSchedule(week, week % 2 == 0);
 }
-List<ScheduleItem> items = scheduleDao.getScheduleForTeacher(teacher, wt);
+List<ScheduleItem> items = scheduleDao.getScheduleForTeacher(teacher, wt, semesterId);
 LocalDate saturday = monday.plusDays(5);
 List<TransferItem> transfers = transferDao.getForDateRange(monday.toString(), saturday.toString());
 WeekSchedule ws = scheduleFilter.buildWeekSchedule(items, week, wt, monday, transfers, teacher, false);
@@ -289,9 +379,10 @@ d.setDayOff(true);
 return d;
 }
 String wt = weekCalculator.getWeekTypeForDate(today);
+String activeSem = getActiveSemesterId();
 List<ScheduleItem> items = group
-? scheduleDao.getScheduleForGroup(name, wt)
-: scheduleDao.getScheduleForTeacher(name, wt);
+? scheduleDao.getScheduleForGroup(name, wt, activeSem)
+: scheduleDao.getScheduleForTeacher(name, wt, activeSem);
 List<TransferItem> transfers = transferDao.getForDate(today.toString());
 DaySchedule day = scheduleFilter.buildDaySchedule(items, dow, week, wt, today, transfers, name, group);
 mergeCustomEventsIntoDay(day, customEventDao.getForTarget(name, group), wt);
@@ -323,9 +414,10 @@ if (dow == 0) continue; // воскресенье — всегда выходн�
 int week = weekCalculator.getWeekNumber(date);
 if (week < 1) continue; // вне семестра
 String wt = weekCalculator.getWeekTypeForDate(date);
+String activeSem = getActiveSemesterId();
 List<ScheduleItem> items = group
-? scheduleDao.getScheduleForGroup(name, wt)
-: scheduleDao.getScheduleForTeacher(name, wt);
+? scheduleDao.getScheduleForGroup(name, wt, activeSem)
+: scheduleDao.getScheduleForTeacher(name, wt, activeSem);
 List<TransferItem> transfers = transferDao.getForDate(date.toString());
 DaySchedule day = scheduleFilter.buildDaySchedule(items, dow, week, wt, date, transfers, name, group);
 if (day.isDayOff()) continue; // праздничный выходной
@@ -395,11 +487,20 @@ public String getSelectionName() {
 return prefsManager.getSelectionName();
 }
 public void updateSemesterStart(LocalDate start) {
-if (start != null) {
-prefsManager.saveSemesterStart(start);
+updateSemesterStart(getActiveSemesterId(), start);
 }
+
+public void updateSemesterStart(String semesterId, LocalDate start) {
+String sem = (SemesterManager.SEMESTER_SPRING.equals(semesterId))
+? SemesterManager.SEMESTER_SPRING
+: SemesterManager.SEMESTER_FALL;
+if (start != null) {
+prefsManager.saveSemesterStart(sem, start);
+}
+if (sem.equals(getActiveSemesterId())) {
 userDao.updateSemesterStart(start);
 refreshLogic();
+}
 }
 public LocalDate getSemesterStart() {
 return prefsManager.getSemesterStart();
