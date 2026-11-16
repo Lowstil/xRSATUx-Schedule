@@ -29,6 +29,7 @@ import com.university.schedule.util.SkippedLessonsManager;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -166,9 +167,21 @@ public final class LiveLessonService {
                 }
             }
 
-            if (currentItem == null && nextItem == null) {
+            if (currentItem == null) {
                 cancelNotification(context);
-                cancelNextTick(context);
+                if (nextItem != null && nextStart != null) {
+                    long triggerAt = today.atTime(nextStart)
+                            .atZone(ZoneId.systemDefault())
+                            .toInstant()
+                            .toEpochMilli();
+                    if (triggerAt > System.currentTimeMillis()) {
+                        scheduleTickAt(context, triggerAt);
+                    } else {
+                        cancelNextTick(context);
+                    }
+                } else {
+                    cancelNextTick(context);
+                }
                 return;
             }
 
@@ -190,51 +203,38 @@ public final class LiveLessonService {
                     .setContentIntent(contentPi)
                     .setPriority(NotificationCompat.PRIORITY_LOW);
 
-            if (currentItem != null) {
-                ScheduleClock.LessonProgress lp = ScheduleClock.computeLessonProgress(currentStart, currentEnd, now);
-                String room = currentItem.getRoom();
-                String title = currentItem.getLessonNumber() + " пара · " + safe(currentItem.getSubjectName());
-                if (room != null && !room.isEmpty()) {
-                    title += " · ауд. " + room;
-                }
+            ScheduleClock.LessonProgress lp = ScheduleClock.computeLessonProgress(currentStart, currentEnd, now);
+            String room = currentItem.getRoom();
+            String title = currentItem.getLessonNumber() + " пара · " + safe(currentItem.getSubjectName());
+            if (room != null && !room.isEmpty()) {
+                title += " · ауд. " + room;
+            }
 
-                String stageText;
-                if (lp != null) {
-                    if (lp.stage == 1) {
-                        int toBreak = Math.max(0, lp.part1Max - lp.part1Progress);
-                        stageText = "1-я половина 45м · до перерыва " + toBreak + " мин (ост. " + lp.remainingMinutes + " мин)";
-                    } else if (lp.stage == 2) {
-                        int toPart2 = Math.max(0, lp.breakMax - lp.breakProgress);
-                        stageText = "Перерыв 5м · до 2-й половины " + toPart2 + " мин";
-                    } else {
-                        stageText = "2-я половина 45м · осталось " + lp.remainingMinutes + " мин";
-                    }
-                    builder.setProgress(lp.totalMinutes, lp.elapsedMinutes, false);
+            String stageText;
+            if (lp != null) {
+                if (lp.stage == 1) {
+                    int toBreak = Math.max(0, lp.part1Max - lp.part1Progress);
+                    stageText = "1-я половина 45м · до перерыва " + toBreak + " мин (ост. " + lp.remainingMinutes + " мин)";
+                } else if (lp.stage == 2) {
+                    int toPart2 = Math.max(0, lp.breakMax - lp.breakProgress);
+                    stageText = "Перерыв 5м · до 2-й половины " + toPart2 + " мин";
                 } else {
-                    stageText = "Идёт занятие";
+                    stageText = "2-я половина 45м · осталось " + lp.remainingMinutes + " мин";
                 }
-
-                builder.setContentTitle(title);
-                builder.setContentText(stageText);
-
-                if (nextItem != null) {
-                    String nextLine = "Далее: " + nextItem.getLessonNumber() + " пара · " + safe(nextItem.getSubjectName());
-                    if (nextItem.getRoom() != null && !nextItem.getRoom().isEmpty()) {
-                        nextLine += " (ауд. " + nextItem.getRoom() + ")";
-                    }
-                    builder.setStyle(new NotificationCompat.BigTextStyle().bigText(stageText + "\n" + nextLine));
-                }
+                builder.setProgress(lp.totalMinutes, lp.elapsedMinutes, false);
             } else {
-                long minsUntil = Math.max(1, java.time.Duration.between(now, nextStart).toMinutes());
-                String room = nextItem.getRoom();
-                String title = "До " + nextItem.getLessonNumber() + " пары: " + minsUntil + " мин";
-                String body = safe(nextItem.getSubjectName());
-                if (room != null && !room.isEmpty()) {
-                    body += " · ауд. " + room;
+                stageText = "Идёт занятие";
+            }
+
+            builder.setContentTitle(title);
+            builder.setContentText(stageText);
+
+            if (nextItem != null) {
+                String nextLine = "Далее: " + nextItem.getLessonNumber() + " пара · " + safe(nextItem.getSubjectName());
+                if (nextItem.getRoom() != null && !nextItem.getRoom().isEmpty()) {
+                    nextLine += " (ауд. " + nextItem.getRoom() + ")";
                 }
-                builder.setContentTitle(title);
-                builder.setContentText(body);
-                builder.setProgress(0, 0, false);
+                builder.setStyle(new NotificationCompat.BigTextStyle().bigText(stageText + "\n" + nextLine));
             }
 
             NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
@@ -270,6 +270,10 @@ public final class LiveLessonService {
     }
 
     private static void scheduleNextTick(Context context) {
+        scheduleTickAt(context, System.currentTimeMillis() + TICK_INTERVAL_MS);
+    }
+
+    private static void scheduleTickAt(Context context, long triggerAt) {
         AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
         if (am == null) return;
         PendingIntent pi = PendingIntent.getBroadcast(
@@ -277,7 +281,6 @@ public final class LiveLessonService {
                 new Intent(context, TickReceiver.class),
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
-        long triggerAt = System.currentTimeMillis() + TICK_INTERVAL_MS;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi);
         } else {
