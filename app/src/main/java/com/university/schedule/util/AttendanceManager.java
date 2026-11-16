@@ -65,6 +65,7 @@ public class AttendanceManager {
     private final ExcludedSubjectsManager excludedMgr;
 
     private String cachedGroup;
+    private String cachedSemesterId;
     private LocalDate cachedDate;
     private Map<String, SubjectAttendance> cachedStats;
     private OverallAttendance cachedOverall;
@@ -78,13 +79,16 @@ public class AttendanceManager {
 
     public synchronized void invalidateCache() {
         cachedGroup = null;
+        cachedSemesterId = null;
         cachedStats = null;
         cachedOverall = null;
     }
 
     public synchronized Map<String, SubjectAttendance> getStatsMap(String groupName) {
         LocalDate today = DateUtils.todayMoscow();
+        String semId = ScheduleRepository.getInstance(context).getActiveSemesterId();
         if (cachedStats != null && groupName != null && groupName.equalsIgnoreCase(cachedGroup)
+                && semId != null && semId.equals(cachedSemesterId)
                 && today.equals(cachedDate)) {
             return cachedStats;
         }
@@ -167,10 +171,12 @@ public class AttendanceManager {
         if (groupName == null || groupName.isEmpty()) return;
 
         ScheduleRepository repo = ScheduleRepository.getInstance(context);
+        String semId = repo.getActiveSemesterId();
+        cachedSemesterId = semId;
         LocalDate semStart = repo.getSemesterStart();
         if (semStart == null) return;
 
-        WeekCalculator calc = repo.getWeekCalculator();
+        WeekCalculator calc = repo.getWeekCalculator(semId);
         HolidayChecker holidayChecker = repo.getHolidayChecker();
         Set<String> excluded = excludedMgr.getExcludedSubjects(groupName);
 
@@ -179,8 +185,8 @@ public class AttendanceManager {
         if (semStart.isAfter(scanEnd)) return;
 
         // Пакетная загрузка расписания и переносов вместо ~240 отдельных запросов к БД
-        List<ScheduleItem> oddLessons = repo.getScheduleForGroupAndWeekType(groupName, Constants.WEEK_TYPE_ODD);
-        List<ScheduleItem> evenLessons = repo.getScheduleForGroupAndWeekType(groupName, Constants.WEEK_TYPE_EVEN);
+        List<ScheduleItem> oddLessons = repo.getScheduleForGroupAndWeekType(groupName, Constants.WEEK_TYPE_ODD, semId);
+        List<ScheduleItem> evenLessons = repo.getScheduleForGroupAndWeekType(groupName, Constants.WEEK_TYPE_EVEN, semId);
         List<TransferItem> allTransfers = repo.getTransfersForDateRange(semStart.toString(), scanEnd.toString());
         Map<String, List<TransferItem>> transfersByDate = new HashMap<>();
         if (allTransfers != null) {

@@ -49,10 +49,20 @@ public final class HomeworkHubDialog {
     private static final int FILTER_ALL = 1;
     private static final int FILTER_DONE = 2;
 
+    public interface OnOpenDateListener {
+        void onOpenDate(LocalDate date);
+    }
+
     private HomeworkHubDialog() {
     }
 
     public static void show(@NonNull AppCompatActivity activity, @Nullable Runnable onNotesChanged) {
+        show(activity, onNotesChanged, null);
+    }
+
+    public static void show(@NonNull AppCompatActivity activity,
+                            @Nullable Runnable onNotesChanged,
+                            @Nullable OnOpenDateListener onOpenDate) {
         if (activity.isFinishing() || activity.isDestroyed()) return;
 
         View dialogView = LayoutInflater.from(activity).inflate(R.layout.dialog_homework_hub, null);
@@ -79,6 +89,7 @@ public final class HomeworkHubDialog {
         final int[] currentFilter = new int[]{FILTER_PENDING};
 
         final HomeworkAdapter[] adapterRef = new HomeworkAdapter[1];
+        final AlertDialog[] dialogRef = new AlertDialog[1];
 
         Runnable applyFilterAndRender = () -> {
             updateFilterSegments(activity, currentFilter[0], btnPending, btnAll, btnDone);
@@ -159,6 +170,19 @@ public final class HomeworkHubDialog {
             public void onPhotoClick(String path) {
                 LessonNoteDialog.showFullScreenPhoto(activity, path);
             }
+
+            @Override
+            public void onOpenDate(LessonNote note) {
+                if (onOpenDate == null || note == null || note.getDate() == null) return;
+                try {
+                    LocalDate date = LocalDate.parse(note.getDate());
+                    if (dialogRef[0] != null) {
+                        dialogRef[0].dismiss();
+                    }
+                    onOpenDate.onOpenDate(date);
+                } catch (Exception ignored) {
+                }
+            }
         });
         rvNotes.setAdapter(adapterRef[0]);
 
@@ -176,6 +200,7 @@ public final class HomeworkHubDialog {
         AlertDialog dialog = new MaterialAlertDialogBuilder(activity)
                 .setView(dialogView)
                 .create();
+        dialogRef[0] = dialog;
 
         dialog.setOnDismissListener(d -> ex.shutdown());
         btnCloseTop.setOnClickListener(v -> dialog.dismiss());
@@ -234,6 +259,7 @@ public final class HomeworkHubDialog {
             void onToggleCompleted(LessonNote note, boolean completed);
             void onDelete(LessonNote note);
             void onPhotoClick(String path);
+            void onOpenDate(LessonNote note);
         }
 
         private final AppCompatActivity activity;
@@ -305,6 +331,11 @@ public final class HomeworkHubDialog {
             holder.btnDelete.setOnClickListener(v -> {
                 v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
                 listener.onDelete(note);
+            });
+
+            holder.cardRoot.setOnClickListener(v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                listener.onOpenDate(note);
             });
         }
 

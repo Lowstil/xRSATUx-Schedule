@@ -21,7 +21,10 @@ public class CustomEventDao {
     }
 
     public long insert(CustomEvent event) {
-        if (event == null) return -1;
+        if (event == null || event.getGroupName() == null) return -1;
+        String target = event.getGroupName().trim();
+        if (target.isEmpty()) return -1;
+        event.setGroupName(target);
         SQLiteDatabase db = dbHelper.getWritableDatabase();
         long id = db.insert(CustomEventEntry.TABLE_NAME, null, toContentValues(event));
         event.setId(id);
@@ -46,9 +49,11 @@ public class CustomEventDao {
 
     public List<CustomEvent> getForTarget(String groupName, boolean isGroup) {
         if (groupName == null) return new ArrayList<>();
+        String target = groupName.trim();
+        if (target.isEmpty()) return new ArrayList<>();
         String selection = CustomEventEntry.COLUMN_GROUP_NAME + " = ? AND " +
                 CustomEventEntry.COLUMN_IS_GROUP + " = ?";
-        String[] args = {groupName, isGroup ? "1" : "0"};
+        String[] args = {target, isGroup ? "1" : "0"};
         return query(selection, args);
     }
 

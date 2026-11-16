@@ -130,23 +130,36 @@ public class ScheduleDao {
 
     /** Строки листа "преподаватели" для конкретного преподавателя, типа недели и дня недели. */
     public List<ScheduleItem> getTeacherScheduleForDay(String teacherName, String weekType, int dayOfWeek) {
-        if (teacherName == null || weekType == null) return new ArrayList<>();
+        return getTeacherScheduleForDay(teacherName, weekType, dayOfWeek, "fall");
+    }
+
+    /** Строки листа "преподаватели" для конкретного преподавателя, типа недели, дня недели и семестра. */
+    public List<ScheduleItem> getTeacherScheduleForDay(String teacherName, String weekType, int dayOfWeek, String semesterId) {
+        if (teacherName == null || weekType == null || semesterId == null) return new ArrayList<>();
         String selection = ScheduleEntry.COLUMN_TEACHER_NAME + " = ? AND " +
                 ScheduleEntry.COLUMN_SOURCE + " = ? AND " +
                 ScheduleEntry.COLUMN_WEEK_TYPE + " = ? AND " +
-                ScheduleEntry.COLUMN_DAY_OF_WEEK + " = ?";
-        String[] args = {teacherName.trim(), SOURCE_TEACHER, weekType, String.valueOf(dayOfWeek)};
+                ScheduleEntry.COLUMN_DAY_OF_WEEK + " = ? AND " +
+                ScheduleEntry.COLUMN_SEMESTER_ID + " = ?";
+        String[] args = {teacherName.trim(), SOURCE_TEACHER, weekType, String.valueOf(dayOfWeek), semesterId};
         return query(selection, args);
     }
 
     /** Уникальный список всех аудиторий из БД, отсортированный по алфавиту. */
     public List<String> extractDistinctRooms() {
+        return extractDistinctRooms("fall");
+    }
+
+    /** Уникальный список всех аудиторий из БД для указанного семестра, отсортированный по алфавиту. */
+    public List<String> extractDistinctRooms(String semesterId) {
         List<String> result = new ArrayList<>();
+        if (semesterId == null) return result;
         SQLiteDatabase db = dbHelper.getReadableDatabase();
         String sql = "SELECT DISTINCT " + ScheduleEntry.COLUMN_ROOM + " FROM " + ScheduleEntry.TABLE_NAME +
-                " WHERE " + ScheduleEntry.COLUMN_ROOM + " IS NOT NULL AND " + ScheduleEntry.COLUMN_ROOM + " != '' " +
+                " WHERE " + ScheduleEntry.COLUMN_SEMESTER_ID + " = ? AND " +
+                ScheduleEntry.COLUMN_ROOM + " IS NOT NULL AND " + ScheduleEntry.COLUMN_ROOM + " != '' " +
                 "ORDER BY " + ScheduleEntry.COLUMN_ROOM + " COLLATE NOCASE ASC";
-        try (Cursor cursor = db.rawQuery(sql, null)) {
+        try (Cursor cursor = db.rawQuery(sql, new String[]{semesterId})) {
             while (cursor.moveToNext()) {
                 String value = cursor.getString(0);
                 if (value != null && !value.trim().isEmpty() && !result.contains(value.trim())) {
@@ -161,15 +174,21 @@ public class ScheduleDao {
 
     /** Множество аудиторий, занятых на заданной паре в заданный день и тип недели. */
     public Set<String> getOccupiedRooms(String weekType, int dayOfWeek, int lessonNumber) {
+        return getOccupiedRooms(weekType, dayOfWeek, lessonNumber, "fall");
+    }
+
+    /** Множество аудиторий, занятых на заданной паре в заданный день, тип недели и семестр. */
+    public Set<String> getOccupiedRooms(String weekType, int dayOfWeek, int lessonNumber, String semesterId) {
         Set<String> occupied = new HashSet<>();
-        if (weekType == null) return occupied;
+        if (weekType == null || semesterId == null) return occupied;
         SQLiteDatabase db = dbHelper.getReadableDatabase();
         String sql = "SELECT DISTINCT " + ScheduleEntry.COLUMN_ROOM + " FROM " + ScheduleEntry.TABLE_NAME +
                 " WHERE " + ScheduleEntry.COLUMN_WEEK_TYPE + " = ? AND " +
                 ScheduleEntry.COLUMN_DAY_OF_WEEK + " = ? AND " +
                 ScheduleEntry.COLUMN_LESSON_NUMBER + " = ? AND " +
+                ScheduleEntry.COLUMN_SEMESTER_ID + " = ? AND " +
                 ScheduleEntry.COLUMN_ROOM + " IS NOT NULL AND " + ScheduleEntry.COLUMN_ROOM + " != ''";
-        String[] args = {weekType, String.valueOf(dayOfWeek), String.valueOf(lessonNumber)};
+        String[] args = {weekType, String.valueOf(dayOfWeek), String.valueOf(lessonNumber), semesterId};
         try (Cursor cursor = db.rawQuery(sql, args)) {
             while (cursor.moveToNext()) {
                 String value = cursor.getString(0);

@@ -21,6 +21,7 @@ import com.google.android.material.tabs.TabLayout;
 import com.university.schedule.R;
 import com.university.schedule.data.ScheduleRepository;
 import com.university.schedule.data.db.ScheduleDao;
+import com.university.schedule.logic.SemesterManager;
 import com.university.schedule.logic.WeekCalculator;
 import com.university.schedule.model.ScheduleItem;
 import com.university.schedule.ui.glass.GlassSurfaceHelper;
@@ -80,6 +81,8 @@ public final class RoomTeacherFinderDialog {
         TextView tvTeacherNowStatus = view.findViewById(R.id.tvTeacherNowStatus);
         LinearLayout llTeacherDayRows = view.findViewById(R.id.llTeacherDayRows);
 
+        MaterialButtonToggleGroup toggleRoomWeekType = view.findViewById(R.id.toggleRoomWeekType);
+        MaterialButtonToggleGroup toggleRoomDay = view.findViewById(R.id.toggleRoomDay);
         ChipGroup chipGroupBuilding = view.findViewById(R.id.chipGroupBuilding);
         MaterialButtonToggleGroup toggleRoomSlot = view.findViewById(R.id.toggleRoomSlot);
         TextView tvFreeRoomsSummary = view.findViewById(R.id.tvFreeRoomsSummary);
@@ -97,13 +100,20 @@ public final class RoomTeacherFinderDialog {
 
         ScheduleDao dao = new ScheduleDao(activity);
         ScheduleRepository repo = ScheduleRepository.getInstance(activity);
+        final String activeSemId = repo.getActiveSemesterId() != null
+                ? repo.getActiveSemesterId()
+                : SemesterManager.SEMESTER_FALL;
 
         LocalDate today = DateUtils.todayMoscow();
         int rawDow = DateUtils.toScheduleDayOfWeek(today);
         final int queryDow = (rawDow >= 1 && rawDow <= 6) ? rawDow : 1;
-        WeekCalculator wc = repo.getWeekCalculator();
+        WeekCalculator wc = repo.getWeekCalculator(activeSemId);
         String wt = wc != null ? wc.getWeekTypeForDate(today) : Constants.WEEK_TYPE_ODD;
         final String queryWeekType = (wt != null) ? wt : Constants.WEEK_TYPE_ODD;
+
+        toggleRoomWeekType.check(Constants.WEEK_TYPE_EVEN.equals(queryWeekType)
+                ? R.id.btnWeekEven : R.id.btnWeekOdd);
+        toggleRoomDay.check(dayButtonId(queryDow));
 
         final List<String> allTeachers = new ArrayList<>();
         final List<String> allRooms = new ArrayList<>();
@@ -134,7 +144,7 @@ public final class RoomTeacherFinderDialog {
         // Initial load of teachers & rooms
         ex.execute(() -> {
             List<String> teachers = dao.extractDistinctTeachers();
-            List<String> rooms = dao.extractDistinctRooms();
+            List<String> rooms = dao.extractDistinctRooms(activeSemId);
             activity.runOnUiThread(() -> {
                 if (activity.isFinishing() || activity.isDestroyed() || !dialog.isShowing()) return;
                 allTeachers.clear();
@@ -145,19 +155,20 @@ public final class RoomTeacherFinderDialog {
                     String resolved = resolveTeacherName(allTeachers, preselectedTeacher);
                     etTeacherSearch.setText(resolved);
                     etTeacherSearch.setSelection(resolved.length());
-                    loadTeacherSchedule(activity, ex, dao, resolved, queryWeekType, queryDow, rawDow == 0,
+                    loadTeacherSchedule(activity, ex, dao, activeSemId, resolved, queryWeekType, queryDow, rawDow == 0,
                             llTeacherSuggestions, llTeacherResult, tvSelectedTeacherName,
                             tvTeacherNowStatus, llTeacherDayRows);
                 } else {
                     renderTeacherSuggestions(activity, allTeachers, "", llTeacherSuggestions, teacher -> {
                         etTeacherSearch.setText(teacher);
-                        loadTeacherSchedule(activity, ex, dao, teacher, queryWeekType, queryDow, rawDow == 0,
+                        loadTeacherSchedule(activity, ex, dao, activeSemId, teacher, queryWeekType, queryDow, rawDow == 0,
                                 llTeacherSuggestions, llTeacherResult, tvSelectedTeacherName,
                                 tvTeacherNowStatus, llTeacherDayRows);
                     });
                 }
-                refreshFreeRooms(activity, ex, dao, allRooms, chipGroupBuilding, toggleRoomSlot,
-                        queryWeekType, queryDow, rawDow == 0, tvFreeRoomsSummary, llFreeRoomsList);
+                refreshFreeRooms(activity, ex, dao, activeSemId, allRooms, toggleRoomWeekType, toggleRoomDay,
+                        chipGroupBuilding, toggleRoomSlot, queryWeekType, queryDow, rawDow == 0,
+                        tvFreeRoomsSummary, llFreeRoomsList);
             });
         });
 
@@ -171,26 +182,34 @@ public final class RoomTeacherFinderDialog {
                 llTeacherSuggestions.setVisibility(View.VISIBLE);
                 renderTeacherSuggestions(activity, allTeachers, q, llTeacherSuggestions, teacher -> {
                     etTeacherSearch.setText(teacher);
-                    loadTeacherSchedule(activity, ex, dao, teacher, queryWeekType, queryDow, rawDow == 0,
+                    loadTeacherSchedule(activity, ex, dao, activeSemId, teacher, queryWeekType, queryDow, rawDow == 0,
                             llTeacherSuggestions, llTeacherResult, tvSelectedTeacherName,
                             tvTeacherNowStatus, llTeacherDayRows);
                 });
             }
         });
 
-        // Default slot to current or next lesson (1..6)
+        // Default slot to current or next lesson (1..7)
         int defaultSlot = detectDefaultSlot();
         toggleRoomSlot.check(slotButtonId(defaultSlot));
 
-        chipGroupBuilding.setOnCheckedStateChangeListener((group, checkedIds) ->
-                refreshFreeRooms(activity, ex, dao, allRooms, chipGroupBuilding, toggleRoomSlot,
-                        queryWeekType, queryDow, rawDow == 0, tvFreeRoomsSummary, llFreeRoomsList));
+        Runnable triggerRoomsRefresh = () -> refreshFreeRooms(
+                activity, ex, dao, activeSemId, allRooms, toggleRoomWeekType, toggleRoomDay,
+                chipGroupBuilding, toggleRoomSlot, queryWeekType, queryDow, rawDow == 0,
+                tvFreeRoomsSummary, llFreeRoomsList);
+
+        toggleRoomWeekType.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
+            if (isChecked) triggerRoomsRefresh.run();
+        });
+
+        toggleRoomDay.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
+            if (isChecked) triggerRoomsRefresh.run();
+        });
+
+        chipGroupBuilding.setOnCheckedStateChangeListener((group, checkedIds) -> triggerRoomsRefresh.run());
 
         toggleRoomSlot.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
-            if (isChecked) {
-                refreshFreeRooms(activity, ex, dao, allRooms, chipGroupBuilding, toggleRoomSlot,
-                        queryWeekType, queryDow, rawDow == 0, tvFreeRoomsSummary, llFreeRoomsList);
-            }
+            if (isChecked) triggerRoomsRefresh.run();
         });
 
         dialog.show();
@@ -237,7 +256,7 @@ public final class RoomTeacherFinderDialog {
     }
 
     private static void loadTeacherSchedule(AppCompatActivity activity, ExecutorService ex, ScheduleDao dao,
-                                            String teacher, String weekType, int dow, boolean isSunday,
+                                            String semId, String teacher, String weekType, int dow, boolean isSunday,
                                             LinearLayout llSuggestions, LinearLayout llResult,
                                             TextView tvName, TextView tvNowStatus, LinearLayout llDayRows) {
         llSuggestions.setVisibility(View.GONE);
@@ -247,7 +266,7 @@ public final class RoomTeacherFinderDialog {
         llDayRows.removeAllViews();
 
         ex.execute(() -> {
-            List<ScheduleItem> items = dao.getTeacherScheduleForDay(teacher, weekType, dow);
+            List<ScheduleItem> items = dao.getTeacherScheduleForDay(teacher, weekType, dow, semId);
             LocalTime now = DateUtils.nowTimeMoscow();
             String[][] times = Constants.getLessonTimes(dow);
 
@@ -325,9 +344,15 @@ public final class RoomTeacherFinderDialog {
     }
 
     private static void refreshFreeRooms(AppCompatActivity activity, ExecutorService ex, ScheduleDao dao,
-                                         List<String> allRooms, ChipGroup chipBuilding,
-                                         MaterialButtonToggleGroup toggleSlot, String weekType,
-                                         int dow, boolean isSunday, TextView tvSummary, LinearLayout llList) {
+                                         String semId, List<String> allRooms,
+                                         MaterialButtonToggleGroup toggleWeekType,
+                                         MaterialButtonToggleGroup toggleDay,
+                                         ChipGroup chipBuilding,
+                                         MaterialButtonToggleGroup toggleSlot,
+                                         String defaultWeekType, int defaultDow, boolean isSunday,
+                                         TextView tvSummary, LinearLayout llList) {
+        String weekType = weekTypeFromButtonId(toggleWeekType.getCheckedButtonId(), defaultWeekType);
+        int dow = dayFromButtonId(toggleDay.getCheckedButtonId(), defaultDow);
         int slot = slotFromButtonId(toggleSlot.getCheckedButtonId());
         int bldId = chipBuilding.getCheckedChipId();
         String dayName = Constants.DAY_NAMES_SHORT[Math.max(0, Math.min(5, dow - 1))];
@@ -335,7 +360,7 @@ public final class RoomTeacherFinderDialog {
         String timeLabel = Constants.getLessonTimeLabel(dow, slot);
 
         ex.execute(() -> {
-            Set<String> occupied = dao.getOccupiedRooms(weekType, dow, slot);
+            Set<String> occupied = dao.getOccupiedRooms(weekType, dow, slot, semId);
             List<String> free = new ArrayList<>();
             for (String room : allRooms) {
                 if (occupied.contains(room)) continue;
@@ -345,8 +370,16 @@ public final class RoomTeacherFinderDialog {
             }
             activity.runOnUiThread(() -> {
                 if (activity.isFinishing() || activity.isDestroyed()) return;
-                String summary = (isSunday ? "Воскресенье (показан ПН)" : "Сегодня (" + dayName + ", " + wtLabel + ")")
-                        + " · " + slot + " пара (" + timeLabel + ") · свободно: " + free.size();
+                boolean matchesToday = (dow == defaultDow && weekType.equals(defaultWeekType));
+                String prefix;
+                if (matchesToday && isSunday) {
+                    prefix = "Воскресенье (показан ПН, " + wtLabel + ")";
+                } else if (matchesToday) {
+                    prefix = "Сегодня (" + dayName + ", " + wtLabel + ")";
+                } else {
+                    prefix = dayName + ", " + wtLabel + " нед.";
+                }
+                String summary = prefix + " · " + slot + " пара (" + timeLabel + ") · свободно: " + free.size();
                 tvSummary.setText(summary);
                 llList.removeAllViews();
 
@@ -426,11 +459,11 @@ public final class RoomTeacherFinderDialog {
     private static int detectDefaultSlot() {
         ScheduleClock.State state = ScheduleClock.compute();
         if (state.current != null) {
-            return Math.max(1, Math.min(6, state.current.lesson));
+            return Math.max(1, Math.min(7, state.current.lesson));
         }
         if (state.next != null && state.next.date != null
                 && state.next.date.equals(DateUtils.todayMoscow())) {
-            return Math.max(1, Math.min(6, state.next.lesson));
+            return Math.max(1, Math.min(7, state.next.lesson));
         }
         return 1;
     }
@@ -442,6 +475,7 @@ public final class RoomTeacherFinderDialog {
             case 4: return R.id.btnSlot4;
             case 5: return R.id.btnSlot5;
             case 6: return R.id.btnSlot6;
+            case 7: return R.id.btnSlot7;
             default: return R.id.btnSlot1;
         }
     }
@@ -452,7 +486,35 @@ public final class RoomTeacherFinderDialog {
         if (id == R.id.btnSlot4) return 4;
         if (id == R.id.btnSlot5) return 5;
         if (id == R.id.btnSlot6) return 6;
+        if (id == R.id.btnSlot7) return 7;
         return 1;
+    }
+
+    private static int dayButtonId(int dow) {
+        switch (dow) {
+            case 2: return R.id.btnDayTue;
+            case 3: return R.id.btnDayWed;
+            case 4: return R.id.btnDayThu;
+            case 5: return R.id.btnDayFri;
+            case 6: return R.id.btnDaySat;
+            default: return R.id.btnDayMon;
+        }
+    }
+
+    private static int dayFromButtonId(int id, int fallback) {
+        if (id == R.id.btnDayMon) return 1;
+        if (id == R.id.btnDayTue) return 2;
+        if (id == R.id.btnDayWed) return 3;
+        if (id == R.id.btnDayThu) return 4;
+        if (id == R.id.btnDayFri) return 5;
+        if (id == R.id.btnDaySat) return 6;
+        return fallback;
+    }
+
+    private static String weekTypeFromButtonId(int id, String fallback) {
+        if (id == R.id.btnWeekOdd) return Constants.WEEK_TYPE_ODD;
+        if (id == R.id.btnWeekEven) return Constants.WEEK_TYPE_EVEN;
+        return fallback;
     }
 
     private static String safeRoom(String r) {
