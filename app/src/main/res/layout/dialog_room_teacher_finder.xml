@@ -155,6 +155,144 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:text="Неделя и день:"
+            android:textColor="@color/glass_text_secondary"
+            android:textSize="12sp" />
+
+        <com.google.android.material.button.MaterialButtonToggleGroup
+            android:id="@+id/toggleRoomWeekType"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            app:selectionRequired="true"
+            app:singleSelection="true">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnWeekOdd"
+                style="@style/Widget.UniSchedule.Button.Outlined"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="1"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minWidth="0dp"
+                android:paddingLeft="6dp"
+                android:paddingRight="6dp"
+                android:text="Нечётная"
+                android:textSize="12sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnWeekEven"
+                style="@style/Widget.UniSchedule.Button.Outlined"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="1"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minWidth="0dp"
+                android:paddingLeft="6dp"
+                android:paddingRight="6dp"
+                android:text="Чётная"
+                android:textSize="12sp" />
+        </com.google.android.material.button.MaterialButtonToggleGroup>
+
+        <com.google.android.material.button.MaterialButtonToggleGroup
+            android:id="@+id/toggleRoomDay"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            app:selectionRequired="true"
+            app:singleSelection="true">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDayMon"
+                style="@style/Widget.UniSchedule.Button.Outlined"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="1"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minWidth="0dp"
+                android:paddingLeft="2dp"
+                android:paddingRight="2dp"
+                android:text="ПН"
+                android:textSize="12sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDayTue"
+                style="@style/Widget.UniSchedule.Button.Outlined"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="1"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minWidth="0dp"
+                android:paddingLeft="2dp"
+                android:paddingRight="2dp"
+                android:text="ВТ"
+                android:textSize="12sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDayWed"
+                style="@style/Widget.UniSchedule.Button.Outlined"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="1"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minWidth="0dp"
+                android:paddingLeft="2dp"
+                android:paddingRight="2dp"
+                android:text="СР"
+                android:textSize="12sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDayThu"
+                style="@style/Widget.UniSchedule.Button.Outlined"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="1"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minWidth="0dp"
+                android:paddingLeft="2dp"
+                android:paddingRight="2dp"
+                android:text="ЧТ"
+                android:textSize="12sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDayFri"
+                style="@style/Widget.UniSchedule.Button.Outlined"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="1"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minWidth="0dp"
+                android:paddingLeft="2dp"
+                android:paddingRight="2dp"
+                android:text="ПТ"
+                android:textSize="12sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDaySat"
+                style="@style/Widget.UniSchedule.Button.Outlined"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="1"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minWidth="0dp"
+                android:paddingLeft="2dp"
+                android:paddingRight="2dp"
+                android:text="СБ"
+                android:textSize="12sp" />
+        </com.google.android.material.button.MaterialButtonToggleGroup>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
             android:text="Корпус:"
             android:textColor="@color/glass_text_secondary"
             android:textSize="12sp" />
@@ -292,6 +430,17 @@
                 android:paddingLeft="4dp"
                 android:paddingRight="4dp"
                 android:text="6" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSlot7"
+                style="@style/Widget.UniSchedule.Button.Outlined"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:minWidth="0dp"
+                android:paddingLeft="4dp"
+                android:paddingRight="4dp"
+                android:text="7" />
         </com.google.android.material.button.MaterialButtonToggleGroup>
 
         <TextView

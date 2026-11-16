@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.Editable;
@@ -31,6 +32,7 @@ import com.google.android.material.checkbox.MaterialCheckBox;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 import com.google.android.material.textfield.TextInputEditText;
+import com.university.schedule.BuildConfig;
 import com.university.schedule.R;
 import com.university.schedule.data.ScheduleRepository;
 import com.university.schedule.logic.SemesterManager;
@@ -69,6 +71,7 @@ public class SettingsActivity extends AppCompatActivity {
     private ExcludedSubjectsManager excludedManager;
     private final ExecutorService ex = Executors.newSingleThreadExecutor();
     private TextView tvSel, tvSelectedSemester, tvSem, tvUpd, tvTransfersUpd;
+    private TextView tvAboutVersion, tvAboutLastUpdated;
     private MaterialButton btnRefresh;
     private MaterialButtonToggleGroup toggleTheme;
     private SwitchMaterial switchLessonReminder, switchMorningDigest, switchLiveLessonNotif, switchReducedTransparency;
@@ -121,6 +124,24 @@ public class SettingsActivity extends AppCompatActivity {
         tvExcludedSubjectsSummary = findViewById(R.id.tvExcludedSubjectsSummary);
         btnSelectExcludedSubjects = findViewById(R.id.btnSelectExcludedSubjects);
 
+        tvAboutVersion = findViewById(R.id.tvAboutVersion);
+        tvAboutLastUpdated = findViewById(R.id.tvAboutLastUpdated);
+        if (tvAboutVersion != null) {
+            tvAboutVersion.setText("Версия: v" + BuildConfig.VERSION_NAME);
+        }
+        View btnAboutReleases = findViewById(R.id.btnAboutReleases);
+        if (btnAboutReleases != null) {
+            btnAboutReleases.setOnClickListener(v -> {
+                try {
+                    Intent intent = new Intent(Intent.ACTION_VIEW,
+                            Uri.parse("https://github.com/Lowstil/xRSATUx-Schedule/releases"));
+                    startActivity(intent);
+                } catch (Exception e) {
+                    Toast.makeText(this, "Не удалось открыть браузер", Toast.LENGTH_SHORT).show();
+                }
+            });
+        }
+
         findViewById(R.id.btnChangeSelection).setOnClickListener(v -> {
             Intent i = new Intent(this, SelectionActivity.class);
             i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
@@ -154,7 +175,8 @@ public class SettingsActivity extends AppCompatActivity {
                 R.id.cardNotifications,
                 R.id.cardSemester,
                 R.id.cardAppearance,
-                R.id.cardData
+                R.id.cardData,
+                R.id.cardAboutApp
         };
         for (int id : cardIds) {
             View card = findViewById(id);
@@ -278,6 +300,11 @@ public class SettingsActivity extends AppCompatActivity {
         tvSem.setText(SemesterManager.describeSemester(activeSemId, semStart));
         LocalDateTime ldt = DateUtils.parseIsoDateTime(repo.getLastUpdated());
         tvUpd.setText(ldt != null ? "Расписание обновлено: " + ldt.format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")) : "Расписание ещё не обновлялось");
+        if (tvAboutLastUpdated != null) {
+            tvAboutLastUpdated.setText(ldt != null
+                    ? "Последнее обновление расписания: " + ldt.format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))
+                    : "Последнее обновление расписания: «Ещё не обновлялось»");
+        }
         LocalDateTime tldt = DateUtils.parseIsoDateTime(repo.getTransfersLastUpdated());
         tvTransfersUpd.setText(tldt != null ? "Переносы обновлены: " + tldt.format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")) : "Переносы ещё не загружались");
     }

@@ -522,6 +522,45 @@ public class MainActivity extends AppCompatActivity {
         updateClock();
     }
 
+    private void navigateToDate(LocalDate targetDate) {
+        if (targetDate == null) return;
+        String targetSem = SemesterManager.getCurrentWindowSemester(targetDate);
+        WeekCalculator targetCalc = repo.getWeekCalculator(targetSem);
+        int computedWeek = targetCalc != null ? targetCalc.getWeekNumber(targetDate) : 1;
+        if (computedWeek < 1) {
+            String otherSem = SemesterManager.SEMESTER_FALL.equals(targetSem)
+                    ? SemesterManager.SEMESTER_SPRING : SemesterManager.SEMESTER_FALL;
+            WeekCalculator otherCalc = repo.getWeekCalculator(otherSem);
+            int otherWeek = otherCalc != null ? otherCalc.getWeekNumber(targetDate) : 0;
+            if (otherWeek >= 1 && otherWeek <= DayPagerAdapter.WEEK_COUNT) {
+                targetSem = otherSem;
+                computedWeek = otherWeek;
+            } else {
+                computedWeek = 1;
+            }
+        }
+        if (computedWeek > DayPagerAdapter.WEEK_COUNT) {
+            computedWeek = DayPagerAdapter.WEEK_COUNT;
+        }
+        int dow = DateUtils.toScheduleDayOfWeek(targetDate);
+        int targetDay = (dow >= 1 && dow <= 6) ? dow - 1 : 0;
+
+        boolean semChanged = !targetSem.equals(activeSemesterId);
+        if (semChanged) {
+            switchActiveSemester(targetSem, true);
+        }
+        weekNum = computedWeek;
+        dayIndex = targetDay;
+        currentWeek = weekController.getCachedWeek(weekNum, activeSemesterId);
+        updateWeekHeaderUi();
+        updateDayTabsForWeek();
+        int targetPos = DayPagerAdapter.positionOf(activeSemesterId, weekNum, dayIndex);
+        boolean smooth = viewPager != null && Math.abs(viewPager.getCurrentItem() - targetPos) <= 12;
+        selectPage(activeSemesterId, weekNum, dayIndex, smooth);
+        loadWeek();
+        updateClock();
+    }
+
     private void switchActiveSemester(@NonNull String semesterId, boolean showToast) {
         if (semesterId.equals(activeSemesterId)) return;
         activeSemesterId = semesterId;
@@ -644,7 +683,7 @@ public class MainActivity extends AppCompatActivity {
                 clearWeekCache();
                 loadWeek();
                 updateDockMoreBadge();
-            });
+            }, this::navigateToDate);
         });
         addMoreMenuItem(root, "🔔", "Расписание звонков", null, () -> {
             dialog.dismiss();

@@ -94,8 +94,9 @@ public final class LiveLessonService {
 
             ScheduleRepository repo = ScheduleRepository.getInstance(context);
             String selType = repo.getSelectionType();
-            String selName = repo.getSelectionName();
-            if (selName == null || selName.isEmpty()) {
+            String rawName = repo.getSelectionName();
+            String selName = rawName != null ? rawName.trim() : "";
+            if (selName.isEmpty() || (!"group".equals(selType) && !"teacher".equals(selType))) {
                 cancelNotification(context);
                 cancelNextTick(context);
                 return;
@@ -127,6 +128,10 @@ public final class LiveLessonService {
             List<ScheduleItem> activeList = new ArrayList<>();
             for (ScheduleItem item : todaySchedule.getLessons()) {
                 if (item.isCancelled()) continue;
+                if (item.isCustom() && isGroup) {
+                    String itemGroup = item.getGroupName() != null ? item.getGroupName().trim() : "";
+                    if (!selName.equals(itemGroup)) continue;
+                }
                 if (isGroup && excludedMgr.isExcluded(selName, item.getSubjectName())) continue;
                 if (skippedMgr.isSkipped(today.toString(), item.getLessonNumber(), item.getSubjectName())) continue;
                 activeList.add(item);
