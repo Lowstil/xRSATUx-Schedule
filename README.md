@@ -4,6 +4,7 @@
 [![Language](https://img.shields.io/badge/Java-17-ED8B00?logo=openjdk&logoColor=white)](https://openjdk.org)
 [![UI](https://img.shields.io/badge/UI-Liquid%20Glass-6C8CFF)](https://github.com/Lowstil/xRSATUx-Schedule)
 [![Offline](https://img.shields.io/badge/Mode-Offline--First%20SQLite-059669)](https://github.com/Lowstil/xRSATUx-Schedule)
+[![Release](https://img.shields.io/badge/Release-v3.3.1-blue?logo=github)](https://github.com/Lowstil/xRSATUx-Schedule/releases/tag/v3.3.1)
 
 Современное, быстрое и визуально выразительное Android-приложение для просмотра расписания занятий студентов и преподавателей **Рыбинского государственного авиационного технического университета имени П. А. Соловьёва (РГАТУ им. П. А. Соловьёва)**.
 
