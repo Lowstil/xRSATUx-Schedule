@@ -89,6 +89,22 @@ public final class FavoritesManager {
         }
     }
 
+    public static synchronized void replaceFavorites(Context context, List<GroupOrTeacher> favorites) {
+        List<GroupOrTeacher> clean = new ArrayList<>();
+        if (favorites != null) {
+            for (GroupOrTeacher item : favorites) {
+                if (item == null || item.getName() == null || item.getName().trim().isEmpty()) {
+                    continue;
+                }
+                String type = item.getType() != null && !item.getType().trim().isEmpty()
+                        ? item.getType().trim()
+                        : GroupOrTeacher.TYPE_GROUP;
+                clean.add(new GroupOrTeacher(item.getName().trim(), type));
+            }
+        }
+        saveList(context, clean);
+    }
+
     private static void saveList(Context context, List<GroupOrTeacher> list) {
         JSONArray arr = new JSONArray();
         for (GroupOrTeacher it : list) {

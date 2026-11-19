@@ -131,6 +131,37 @@ public class NoteDao {
         return db.update(ScheduleContract.NoteEntry.TABLE_NAME, cv, where, args) > 0;
     }
 
+    public void replaceAll(List<LessonNote> notes) {
+        SQLiteDatabase db = dbHelper.getWritableDatabase();
+        db.beginTransaction();
+        try {
+            db.delete(ScheduleContract.NoteEntry.TABLE_NAME, null, null);
+            if (notes != null) {
+                for (LessonNote note : notes) {
+                    if (note == null || note.getDate() == null || note.getDate().trim().isEmpty()) {
+                        continue;
+                    }
+                    ContentValues cv = new ContentValues();
+                    cv.put(ScheduleContract.NoteEntry.COLUMN_DATE, note.getDate().trim());
+                    cv.put(ScheduleContract.NoteEntry.COLUMN_LESSON_NUMBER, note.getLessonNumber());
+                    cv.put(ScheduleContract.NoteEntry.COLUMN_SUBJECT_NAME,
+                            note.getSubjectName() != null ? note.getSubjectName() : "");
+                    cv.put(ScheduleContract.NoteEntry.COLUMN_NOTE_TEXT,
+                            note.getNoteText() != null ? note.getNoteText() : "");
+                    cv.put(ScheduleContract.NoteEntry.COLUMN_IMAGE_PATH, note.getImagePath());
+                    cv.put(ScheduleContract.NoteEntry.COLUMN_IS_COMPLETED, note.isCompleted() ? 1 : 0);
+                    String createdAt = note.getCreatedAt();
+                    cv.put(ScheduleContract.NoteEntry.COLUMN_CREATED_AT,
+                            (createdAt != null && !createdAt.isEmpty()) ? createdAt : DateUtils.nowIsoDateTime());
+                    db.insert(ScheduleContract.NoteEntry.TABLE_NAME, null, cv);
+                }
+            }
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+    }
+
     private LessonNote mapCursor(Cursor c) {
         long id = c.getLong(c.getColumnIndexOrThrow(ScheduleContract.NoteEntry._ID));
         String date = c.getString(c.getColumnIndexOrThrow(ScheduleContract.NoteEntry.COLUMN_DATE));

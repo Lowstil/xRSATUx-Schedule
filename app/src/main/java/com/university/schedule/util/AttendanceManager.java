@@ -162,6 +162,47 @@ public class AttendanceManager {
         return prefs.getInt(key, 0);
     }
 
+    public synchronized Map<String, Integer> getAllManualAdjustments() {
+        Map<String, Integer> result = new HashMap<>();
+        Map<String, ?> all = prefs.getAll();
+        if (all != null) {
+            for (Map.Entry<String, ?> entry : all.entrySet()) {
+                String key = entry.getKey();
+                if (key != null && key.startsWith(PREF_ATTENDANCE_MANUAL_PREFIX)
+                        && entry.getValue() instanceof Integer) {
+                    int val = (Integer) entry.getValue();
+                    if (val != 0) {
+                        result.put(key.substring(PREF_ATTENDANCE_MANUAL_PREFIX.length()), val);
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
+    public synchronized void replaceAllManualAdjustments(Map<String, Integer> adjustments) {
+        SharedPreferences.Editor editor = prefs.edit();
+        Map<String, ?> all = prefs.getAll();
+        if (all != null) {
+            for (String key : all.keySet()) {
+                if (key != null && key.startsWith(PREF_ATTENDANCE_MANUAL_PREFIX)) {
+                    editor.remove(key);
+                }
+            }
+        }
+        if (adjustments != null) {
+            for (Map.Entry<String, Integer> entry : adjustments.entrySet()) {
+                String suffix = entry.getKey();
+                Integer val = entry.getValue();
+                if (suffix != null && !suffix.isEmpty() && val != null && val != 0) {
+                    editor.putInt(PREF_ATTENDANCE_MANUAL_PREFIX + suffix, val);
+                }
+            }
+        }
+        editor.apply();
+        invalidateCache();
+    }
+
     private void recalculate(String groupName, LocalDate today) {
         cachedGroup = groupName;
         cachedDate = today;

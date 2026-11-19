@@ -25,6 +25,13 @@
     <string name="settings_theme_dark">Тёмная</string>
     <string name="settings_refresh">Обновить расписание</string>
     <string name="settings_clear">Очистить все данные</string>
+    <string name="settings_backup_section">Резервное копирование</string>
+    <string name="settings_backup_title">Бэкап и перенос данных</string>
+    <string name="settings_backup_subtitle">Заметки с фото, личные события, посещаемость, перезачёты, избранное и настройки</string>
+    <string name="settings_backup_export">Сохранить бэкап (.zip)</string>
+    <string name="settings_backup_import">Восстановить из файла</string>
+    <string name="settings_backup_exporting">Сохранение бэкапа…</string>
+    <string name="settings_backup_importing">Восстановление данных…</string>
     <string name="action_settings">Настройки</string>
     <string name="action_refresh">Обновить</string>
     <string name="settings_auto_sync">Фоновая автосинхронизация</string>

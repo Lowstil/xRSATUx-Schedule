@@ -185,4 +185,37 @@ public class SkippedLessonsManager {
     public void setSkipped(LocalDate date, int lessonNumber, String subjectName, boolean skipped) {
         setSkipped(date != null ? date.toString() : null, lessonNumber, subjectName, skipped);
     }
+
+    public synchronized Set<String> getAllSkippedKeys() {
+        Set<String> set = prefs.getStringSet(PREF_SKIPPED, null);
+        return set != null ? new HashSet<>(set) : new HashSet<>();
+    }
+
+    public synchronized Set<String> getAllAttendedKeys() {
+        Set<String> set = prefs.getStringSet(PREF_ATTENDED, null);
+        return set != null ? new HashSet<>(set) : new HashSet<>();
+    }
+
+    public synchronized void replaceAll(Set<String> skippedKeys, Set<String> attendedKeys) {
+        Set<String> cleanSkipped = new HashSet<>();
+        if (skippedKeys != null) {
+            for (String k : skippedKeys) {
+                if (k != null && !k.trim().isEmpty()) {
+                    cleanSkipped.add(k);
+                }
+            }
+        }
+        Set<String> cleanAttended = new HashSet<>();
+        if (attendedKeys != null) {
+            for (String k : attendedKeys) {
+                if (k != null && !k.trim().isEmpty() && !cleanSkipped.contains(k)) {
+                    cleanAttended.add(k);
+                }
+            }
+        }
+        prefs.edit()
+                .putStringSet(PREF_SKIPPED, cleanSkipped)
+                .putStringSet(PREF_ATTENDED, cleanAttended)
+                .apply();
+    }
 }
