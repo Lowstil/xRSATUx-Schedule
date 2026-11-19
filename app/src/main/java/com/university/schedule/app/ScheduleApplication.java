@@ -44,7 +44,8 @@ public class ScheduleApplication extends Application {
         com.university.schedule.notification.ReminderScheduler.rescheduleAll(this);
         Executors.newSingleThreadExecutor().execute(() -> {
             ScheduleRepository.getInstance(this);
-            Log.d(TAG, "ScheduleRepository прогрет в фоне");
+            com.university.schedule.notification.AutoSyncScheduler.syncScheduleState(this);
+            Log.d(TAG, "ScheduleRepository прогрет в фоне, автосинхронизация синхронизирована");
         });
         Log.d(TAG, "UniSchedule запущен");
     }

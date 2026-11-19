@@ -27,4 +27,6 @@
     <string name="settings_clear">Очистить все данные</string>
     <string name="action_settings">Настройки</string>
     <string name="action_refresh">Обновить</string>
+    <string name="settings_auto_sync">Фоновая автосинхронизация</string>
+    <string name="settings_auto_sync_desc">Проверяет сайт РГАТУ каждые 12 ч и присылает пуш при изменении пар или переносов</string>
 </resources>

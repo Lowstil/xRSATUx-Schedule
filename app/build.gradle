@@ -48,6 +48,7 @@ dependencies {
     implementation 'androidx.cardview:cardview:1.0.0'
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
     implementation 'androidx.viewpager2:viewpager2:1.0.0'
+    implementation 'androidx.work:work-runtime:2.9.1'
     implementation('org.apache.poi:poi:5.2.5') { exclude group: 'org.apache.commons', module: 'commons-compress' }
     implementation('org.apache.poi:poi-ooxml:5.2.5') { exclude group: 'org.apache.commons', module: 'commons-compress' }
     implementation 'org.apache.commons:commons-compress:1.26.1'
