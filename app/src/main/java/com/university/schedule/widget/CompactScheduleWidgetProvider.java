@@ -1,11 +1,13 @@
 package com.university.schedule.widget;
 
+import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.appwidget.AppWidgetManager;
 import android.appwidget.AppWidgetProvider;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Build;
 import android.util.Log;
 import android.view.View;
 import android.widget.RemoteViews;
@@ -21,7 +23,6 @@ import com.university.schedule.util.Constants;
 import com.university.schedule.util.DateUtils;
 import com.university.schedule.util.ExcludedSubjectsManager;
 import com.university.schedule.util.RoomFormatter;
-import com.university.schedule.util.ScheduleClock;
 import com.university.schedule.util.SkippedLessonsManager;
 
 import java.time.LocalDate;
@@ -38,27 +39,90 @@ import java.util.concurrent.Executors;
  * - Во время пары: название, аудитория, трёхсегментный прогресс-бар (45-5-45) и обратный отсчёт.
  * - На перемене / до пары: название следующей пары, аудитория и крупный таймер: "до звонка X мин".
  * - Вне занятий / на выходных: информация о ближайшей паре.
+ *
+ * Самоперезапускающийся AlarmManager-тикер ({@link #ACTION_COMPACT_WIDGET_TICK}) обновляет
+ * виджет каждые 30 секунд во время активной пары (и за 15 минут до её начала) без открытия
+ * приложения, а вне учебных часов засыпает до следующего учебного окна для экономии батареи.
  */
 public class CompactScheduleWidgetProvider extends AppWidgetProvider {
     private static final String TAG = "CompactScheduleWidget";
+    public static final String ACTION_COMPACT_WIDGET_TICK = "com.university.schedule.action.COMPACT_WIDGET_TICK";
+    private static final int RC_COMPACT_WIDGET_TICK = 3001;
     private static final DateTimeFormatter TF = DateTimeFormatter.ofPattern("HH:mm");
     private static final ExecutorService ex = Executors.newSingleThreadExecutor();
 
+    private static final class BuildResult {
+        final RemoteViews views;
+        final long nextTickDelayMs;
+
+        BuildResult(RemoteViews views, long nextTickDelayMs) {
+            this.views = views;
+            this.nextTickDelayMs = nextTickDelayMs;
+        }
+    }
+
+    @Override
+    public void onEnabled(Context context) {
+        super.onEnabled(context);
+        updateAllWidgets(context);
+    }
+
+    @Override
+    public void onDisabled(Context context) {
+        super.onDisabled(context);
+        cancelScheduledTick(context);
+    }
+
+    @Override
+    public void onDeleted(Context context, int[] appWidgetIds) {
+        super.onDeleted(context, appWidgetIds);
+        if (!hasActiveWidgets(context)) {
+            cancelScheduledTick(context);
+        }
+    }
+
+    @Override
+    public void onReceive(Context context, Intent intent) {
+        if (intent != null && ACTION_COMPACT_WIDGET_TICK.equals(intent.getAction())) {
+            final PendingResult pendingResult = goAsync();
+            final Context appCtx = context.getApplicationContext();
+            ex.execute(() -> {
+                try {
+                    updateAllWidgetsSync(appCtx);
+                } finally {
+                    if (pendingResult != null) {
+                        pendingResult.finish();
+                    }
+                }
+            });
+            return;
+        }
+        super.onReceive(context, intent);
+    }
+
     @Override
     public void onUpdate(Context context, AppWidgetManager appWidgetManager, int[] appWidgetIds) {
-        if (appWidgetIds == null || appWidgetIds.length == 0) return;
+        if (appWidgetIds == null || appWidgetIds.length == 0) {
+            if (!hasActiveWidgets(context)) {
+                cancelScheduledTick(context);
+            }
+            return;
+        }
         final PendingResult pendingResult = goAsync();
         final Context appCtx = context.getApplicationContext();
         ex.execute(() -> {
             try {
+                BuildResult result = buildWidgetState(appCtx);
                 for (int widgetId : appWidgetIds) {
                     try {
-                        RemoteViews views = buildRemoteViews(appCtx);
-                        appWidgetManager.updateAppWidget(widgetId, views);
+                        appWidgetManager.updateAppWidget(widgetId, result.views);
                     } catch (Exception e) {
                         Log.e(TAG, "Ошибка обновления компактного виджета", e);
                     }
                 }
+                scheduleNextTick(appCtx, result.nextTickDelayMs);
+            } catch (Exception e) {
+                Log.e(TAG, "Ошибка сборки компактного виджета", e);
             } finally {
                 if (pendingResult != null) {
                     pendingResult.finish();
@@ -71,8 +135,9 @@ public class CompactScheduleWidgetProvider extends AppWidgetProvider {
         final Context appCtx = context.getApplicationContext();
         ex.execute(() -> {
             try {
-                RemoteViews views = buildRemoteViews(appCtx);
-                appWidgetManager.updateAppWidget(widgetId, views);
+                BuildResult result = buildWidgetState(appCtx);
+                appWidgetManager.updateAppWidget(widgetId, result.views);
+                scheduleNextTick(appCtx, result.nextTickDelayMs);
             } catch (Exception e) {
                 Log.e(TAG, "Ошибка обновления компактного виджета", e);
             }
@@ -80,19 +145,99 @@ public class CompactScheduleWidgetProvider extends AppWidgetProvider {
     }
 
     public static void updateAllWidgets(Context context) {
+        if (context == null) return;
+        final Context appCtx = context.getApplicationContext();
+        ex.execute(() -> updateAllWidgetsSync(appCtx));
+    }
+
+    private static void updateAllWidgetsSync(Context appCtx) {
         try {
-            AppWidgetManager manager = AppWidgetManager.getInstance(context.getApplicationContext());
-            ComponentName provider = new ComponentName(context, CompactScheduleWidgetProvider.class);
+            AppWidgetManager manager = AppWidgetManager.getInstance(appCtx);
+            ComponentName provider = new ComponentName(appCtx, CompactScheduleWidgetProvider.class);
             int[] ids = manager.getAppWidgetIds(provider);
-            for (int id : ids) {
-                updateWidget(context, manager, id);
+            if (ids == null || ids.length == 0) {
+                cancelScheduledTick(appCtx);
+                return;
             }
+            BuildResult result = buildWidgetState(appCtx);
+            for (int id : ids) {
+                try {
+                    manager.updateAppWidget(id, result.views);
+                } catch (Exception e) {
+                    Log.e(TAG, "Ошибка обновления компактного виджета id=" + id, e);
+                }
+            }
+            scheduleNextTick(appCtx, result.nextTickDelayMs);
         } catch (Exception e) {
             Log.e(TAG, "Ошибка массового обновления компактных виджетов", e);
         }
     }
 
-    private static RemoteViews buildRemoteViews(Context context) {
+    private static boolean hasActiveWidgets(Context context) {
+        if (context == null) return false;
+        try {
+            Context appCtx = context.getApplicationContext();
+            AppWidgetManager manager = AppWidgetManager.getInstance(appCtx);
+            int[] ids = manager.getAppWidgetIds(new ComponentName(appCtx, CompactScheduleWidgetProvider.class));
+            return ids != null && ids.length > 0;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public static void scheduleNextTick(Context context, long delayMs) {
+        if (context == null) return;
+        Context appCtx = context.getApplicationContext();
+        if (!hasActiveWidgets(appCtx)) {
+            cancelScheduledTick(appCtx);
+            return;
+        }
+        AlarmManager am = (AlarmManager) appCtx.getSystemService(Context.ALARM_SERVICE);
+        if (am == null) return;
+
+        long safeDelay = Math.max(CompactWidgetTickCalculator.LIVE_TICK_INTERVAL_MS, delayMs);
+        long triggerAt = System.currentTimeMillis() + safeDelay;
+        PendingIntent pi = buildTickPendingIntent(appCtx);
+
+        boolean canExact = true;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            canExact = am.canScheduleExactAlarms();
+        }
+        if (canExact) {
+            try {
+                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi);
+                return;
+            } catch (SecurityException e) {
+                Log.w(TAG, "Точный будильник недоступен, используем setAndAllowWhileIdle", e);
+            }
+        }
+        try {
+            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi);
+        } catch (SecurityException e) {
+            Log.e(TAG, "Не удалось запланировать тик компактного виджета", e);
+        }
+    }
+
+    public static void cancelScheduledTick(Context context) {
+        if (context == null) return;
+        Context appCtx = context.getApplicationContext();
+        AlarmManager am = (AlarmManager) appCtx.getSystemService(Context.ALARM_SERVICE);
+        if (am == null) return;
+        am.cancel(buildTickPendingIntent(appCtx));
+    }
+
+    private static PendingIntent buildTickPendingIntent(Context appCtx) {
+        Intent intent = new Intent(appCtx, CompactScheduleWidgetProvider.class);
+        intent.setAction(ACTION_COMPACT_WIDGET_TICK);
+        return PendingIntent.getBroadcast(
+                appCtx,
+                RC_COMPACT_WIDGET_TICK,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+    }
+
+    private static BuildResult buildWidgetState(Context context) {
         RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.widget_compact_schedule);
         ScheduleRepository repo = ScheduleRepository.getInstance(context);
         String selType = repo.getSelectionType();
@@ -112,7 +257,7 @@ public class CompactScheduleWidgetProvider extends AppWidgetProvider {
             views.setTextViewText(R.id.tvCompactTimeCountdown, "");
             views.setViewVisibility(R.id.compactProgressContainer, View.GONE);
             views.setViewVisibility(R.id.tvCompactSubInfo, View.GONE);
-            return views;
+            return new BuildResult(views, CompactWidgetTickCalculator.IDLE_MAX_SLEEP_MS);
         }
 
         boolean isGroup = GroupOrTeacher.TYPE_GROUP.equals(selType);
@@ -163,6 +308,9 @@ public class CompactScheduleWidgetProvider extends AppWidgetProvider {
             }
         }
 
+        long nextTickDelayMs = CompactWidgetTickCalculator.computeNextTickDelayMs(
+                today, now, currentLesson != null, nxtStart);
+
         if (currentLesson != null && curStart != null && curEnd != null) {
             // --- СЕЙЧАС ИДЁТ ПАРА ---
             int totalMins = (int) ChronoUnit.MINUTES.between(curStart, curEnd);
@@ -203,7 +351,7 @@ public class CompactScheduleWidgetProvider extends AppWidgetProvider {
                 views.setProgressBar(R.id.compactProgressBreak, 5, 5, false);
                 views.setProgressBar(R.id.compactProgressPart2, part2Max, Math.min(part2Max, elapsed - 50), false);
             }
-            return views;
+            return new BuildResult(views, nextTickDelayMs);
         }
 
         if (nextLessonToday != null && nxtStart != null) {
@@ -220,7 +368,7 @@ public class CompactScheduleWidgetProvider extends AppWidgetProvider {
             views.setViewVisibility(R.id.compactProgressContainer, View.GONE);
             views.setViewVisibility(R.id.tvCompactSubInfo, View.VISIBLE);
             views.setTextViewText(R.id.tvCompactSubInfo, nextLessonNum + " пара · звонок в " + nxtStart.format(TF));
-            return views;
+            return new BuildResult(views, nextTickDelayMs);
         }
 
         // --- НА СЕГОДНЯ ПАР БОЛЬШЕ НЕТ / ВЫХОДНОЙ ---
@@ -249,7 +397,7 @@ public class CompactScheduleWidgetProvider extends AppWidgetProvider {
             views.setViewVisibility(R.id.tvCompactSubInfo, View.GONE);
         }
 
-        return views;
+        return new BuildResult(views, nextTickDelayMs);
     }
 
     private static String formatRoom(String rawRoom) {

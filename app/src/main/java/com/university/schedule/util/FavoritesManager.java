@@ -101,5 +101,6 @@ public final class FavoritesManager {
             }
         }
         getPrefs(context).edit().putString(KEY_FAVORITES_JSON, arr.toString()).apply();
+        AppShortcutsHelper.syncDynamicShortcutsAsync(context, list);
     }
 }

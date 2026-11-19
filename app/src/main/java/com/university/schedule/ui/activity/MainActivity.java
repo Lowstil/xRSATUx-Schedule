@@ -69,6 +69,7 @@ import com.university.schedule.ui.dialog.ScheduleDiffDialog;
 import com.university.schedule.ui.glass.AmbientBackdropView;
 import com.university.schedule.ui.glass.GlassSurfaceHelper;
 import com.university.schedule.util.AppError;
+import com.university.schedule.util.AppShortcutsHelper;
 import com.university.schedule.util.AttendanceManager;
 import com.university.schedule.util.Constants;
 import com.university.schedule.util.DateUtils;
@@ -440,7 +441,93 @@ public class MainActivity extends AppCompatActivity {
 
         updateLastUpdatedBanner();
         updateFavoritesBar();
+        AppShortcutsHelper.syncDynamicShortcutsAsync(this);
         loadWeek();
+
+        if (s == null && AppShortcutsHelper.hasShortcutRequest(getIntent())) {
+            final Intent launchIntent = getIntent();
+            viewPager.post(() -> {
+                if (!isFinishing() && !isDestroyed()) {
+                    handleShortcutIntent(launchIntent);
+                }
+            });
+        }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleShortcutIntent(intent);
+    }
+
+    private void handleShortcutIntent(Intent intent) {
+        String action = AppShortcutsHelper.extractShortcutAction(intent);
+        if (action == null || isFinishing() || isDestroyed()) return;
+
+        // Потребляем действие один раз, чтобы оно не повторялось при пересоздании Activity
+        intent.removeExtra(AppShortcutsHelper.EXTRA_SHORTCUT_ACTION);
+        if (AppShortcutsHelper.isShortcutAction(intent.getAction())) {
+            intent.setAction(null);
+        }
+
+        switch (action) {
+            case AppShortcutsHelper.ACTION_FREE_ROOMS:
+                RoomTeacherFinderDialog.showFreeRooms(this);
+                break;
+            case AppShortcutsHelper.ACTION_FIND_TEACHER:
+                RoomTeacherFinderDialog.show(this);
+                break;
+            case AppShortcutsHelper.ACTION_HOMEWORK:
+                HomeworkHubDialog.show(this, () -> {
+                    clearWeekCache();
+                    loadWeek();
+                    updateDockMoreBadge();
+                }, this::navigateToDate);
+                break;
+            case AppShortcutsHelper.ACTION_OPEN_FAVORITE: {
+                String favType = intent.getStringExtra(AppShortcutsHelper.EXTRA_FAVORITE_TYPE);
+                String favName = intent.getStringExtra(AppShortcutsHelper.EXTRA_FAVORITE_NAME);
+                if (favName != null && !favName.trim().isEmpty()) {
+                    String resolvedType = (favType != null && !favType.isEmpty())
+                            ? favType : GroupOrTeacher.TYPE_GROUP;
+                    if (switchSelection(resolvedType, favName.trim())) {
+                        Toast.makeText(this, "★ " + favName.trim(), Toast.LENGTH_SHORT).show();
+                    }
+                }
+                break;
+            }
+            default:
+                break;
+        }
+    }
+
+    private boolean switchSelection(String newType, String newName) {
+        if (newName == null || newName.trim().isEmpty()) return false;
+        String trimmedName = newName.trim();
+        String resolvedType = (newType != null && !newType.isEmpty())
+                ? newType : GroupOrTeacher.TYPE_GROUP;
+        if (trimmedName.equalsIgnoreCase(selName) && resolvedType.equals(selType)) {
+            return false;
+        }
+        selType = resolvedType;
+        selName = trimmedName;
+        repo.saveSelection(selType, selName);
+        if (excludedSubjectsManager != null) {
+            pagerAdapter.setExcludedSubjects(excludedSubjectsManager.getExcludedSubjects(selName));
+        }
+        tvSelectionName.setText(selName);
+        tvSelectionType.setText(GroupOrTeacher.TYPE_GROUP.equals(selType) ? "Группа" : "Преподаватель");
+        clearWeekCache();
+        loadWeek();
+        updateFavoritesBar();
+        if (attendanceManager != null) {
+            attendanceManager.invalidateCache();
+        }
+        WidgetUpdateHelper.updateAllWidgets(this);
+        ReminderScheduler.rescheduleAll(this);
+        LiveLessonService.syncNow(this);
+        return true;
     }
 
     private void applyEdgeToEdgeInsets() {
@@ -946,27 +1033,7 @@ public class MainActivity extends AppCompatActivity {
                     isSelected ? R.color.glass_accent : R.color.glass_text_primary));
             chip.setTypeface(null, isSelected ? Typeface.BOLD : Typeface.NORMAL);
 
-            chip.setOnClickListener(v -> {
-                if (!fav.getName().equalsIgnoreCase(selName)) {
-                    selType = fav.getType();
-                    selName = fav.getName();
-                    repo.saveSelection(selType, selName);
-                    if (excludedSubjectsManager != null) {
-                        pagerAdapter.setExcludedSubjects(excludedSubjectsManager.getExcludedSubjects(selName));
-                    }
-                    tvSelectionName.setText(selName);
-                    tvSelectionType.setText(fav.isGroup() ? "Группа" : "Преподаватель");
-                    clearWeekCache();
-                    loadWeek();
-                    updateFavoritesBar();
-                    if (attendanceManager != null) {
-                        attendanceManager.invalidateCache();
-                    }
-                    WidgetUpdateHelper.updateAllWidgets(this);
-                    ReminderScheduler.rescheduleAll(this);
-                    LiveLessonService.syncNow(this);
-                }
-            });
+            chip.setOnClickListener(v -> switchSelection(fav.getType(), fav.getName()));
 
             chip.setOnLongClickListener(v -> {
                 showFavoriteActionsDialog(fav);

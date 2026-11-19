@@ -29,4 +29,12 @@
     <string name="action_refresh">Обновить</string>
     <string name="settings_auto_sync">Фоновая автосинхронизация</string>
     <string name="settings_auto_sync_desc">Проверяет сайт РГАТУ каждые 12 ч и присылает пуш при изменении пар или переносов</string>
+
+    <string name="shortcut_free_rooms_short">Свободные ауд.</string>
+    <string name="shortcut_free_rooms_long">Свободные аудитории</string>
+    <string name="shortcut_find_teacher_short">Преподаватель</string>
+    <string name="shortcut_find_teacher_long">Где преподаватель?</string>
+    <string name="shortcut_homework_short">Хаб домашек</string>
+    <string name="shortcut_homework_long">Хаб домашек</string>
+    <string name="shortcut_disabled_message">Ярлык недоступен</string>
 </resources>

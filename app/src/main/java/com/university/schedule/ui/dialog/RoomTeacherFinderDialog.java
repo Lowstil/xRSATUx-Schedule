@@ -51,20 +51,25 @@ public final class RoomTeacherFinderDialog {
     }
 
     public static void show(AppCompatActivity activity) {
-        showInternal(activity, null, null);
+        showInternal(activity, null, null, false);
+    }
+
+    public static void showFreeRooms(AppCompatActivity activity) {
+        showInternal(activity, null, null, true);
     }
 
     public static void showForTeacher(AppCompatActivity activity, @Nullable String teacherName) {
-        showInternal(activity, teacherName, null);
+        showInternal(activity, teacherName, null, false);
     }
 
     public static void showForBuilding(AppCompatActivity activity, @Nullable String buildingName) {
-        showInternal(activity, null, buildingName);
+        showInternal(activity, null, buildingName, true);
     }
 
     private static void showInternal(AppCompatActivity activity,
                                      @Nullable String initialTeacher,
-                                     @Nullable String initialBuilding) {
+                                     @Nullable String initialBuilding,
+                                     boolean startOnFreeRooms) {
         if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
 
         View view = LayoutInflater.from(activity).inflate(R.layout.dialog_room_teacher_finder, null);
@@ -133,12 +138,14 @@ public final class RoomTeacherFinderDialog {
         final boolean hasInitialTeacher = !preselectedTeacher.isEmpty();
         final boolean hasInitialBuilding = initialBuilding != null && !initialBuilding.trim().isEmpty();
 
-        if (hasInitialBuilding) {
+        if (startOnFreeRooms || hasInitialBuilding) {
             TabLayout.Tab roomsTab = tabFinder.getTabAt(1);
             if (roomsTab != null) roomsTab.select();
             panelTeacher.setVisibility(View.GONE);
             panelRooms.setVisibility(View.VISIBLE);
-            chipGroupBuilding.check(chipIdForBuilding(initialBuilding));
+            if (hasInitialBuilding) {
+                chipGroupBuilding.check(chipIdForBuilding(initialBuilding));
+            }
         }
 
         // Initial load of teachers & rooms

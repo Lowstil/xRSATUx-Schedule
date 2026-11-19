@@ -6,6 +6,7 @@ import android.util.Log;
 
 import com.university.schedule.BuildConfig;
 import com.university.schedule.data.ScheduleRepository;
+import com.university.schedule.util.AppShortcutsHelper;
 import com.university.schedule.util.ThemeManager;
 
 import java.util.concurrent.Executors;
@@ -45,7 +46,8 @@ public class ScheduleApplication extends Application {
         Executors.newSingleThreadExecutor().execute(() -> {
             ScheduleRepository.getInstance(this);
             com.university.schedule.notification.AutoSyncScheduler.syncScheduleState(this);
-            Log.d(TAG, "ScheduleRepository прогрет в фоне, автосинхронизация синхронизирована");
+            AppShortcutsHelper.syncDynamicShortcuts(this);
+            Log.d(TAG, "ScheduleRepository прогрет в фоне, автосинхронизация и ярлыки синхронизированы");
         });
         Log.d(TAG, "UniSchedule запущен");
     }
