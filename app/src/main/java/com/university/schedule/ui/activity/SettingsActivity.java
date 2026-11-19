@@ -758,6 +758,9 @@ public class SettingsActivity extends AppCompatActivity {
         else if (mins == 30) toggleReminderMinutes.check(R.id.btnReminder30);
         else toggleReminderMinutes.check(R.id.btnReminder15);
         switchMorningDigest.setChecked(prefs.isMorningDigestEnabled());
+        if (switchAutoSync != null) {
+            switchAutoSync.setChecked(prefs.isAutoSyncEnabled());
+        }
         suppressReminderCallback = false;
 
         if (ambientBackdrop != null) {

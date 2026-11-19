@@ -121,6 +121,7 @@ public class BackupManagerTest {
         assertEquals(Integer.valueOf(30), restored.prefs.reminderMinutesBefore);
         assertEquals(Boolean.FALSE, restored.prefs.morningDigestEnabled);
         assertEquals(Boolean.TRUE, restored.prefs.liveLessonNotifEnabled);
+        assertEquals(Boolean.FALSE, restored.prefs.autoSyncEnabled);
     }
 
     @Test
@@ -308,6 +309,7 @@ public class BackupManagerTest {
         p.reminderMinutesBefore = 30;
         p.morningDigestEnabled = false;
         p.liveLessonNotifEnabled = true;
+        p.autoSyncEnabled = false;
         data.prefs = p;
 
         return data;

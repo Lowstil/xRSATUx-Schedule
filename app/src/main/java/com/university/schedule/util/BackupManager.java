@@ -10,6 +10,7 @@ import com.university.schedule.logic.SemesterManager;
 import com.university.schedule.model.CustomEvent;
 import com.university.schedule.model.GroupOrTeacher;
 import com.university.schedule.model.LessonNote;
+import com.university.schedule.notification.AutoSyncScheduler;
 import com.university.schedule.notification.LiveLessonService;
 import com.university.schedule.notification.ReminderScheduler;
 import com.university.schedule.widget.WidgetUpdateHelper;
@@ -84,6 +85,7 @@ public final class BackupManager {
         public Integer reminderMinutesBefore;
         public Boolean morningDigestEnabled;
         public Boolean liveLessonNotifEnabled;
+        public Boolean autoSyncEnabled;
     }
 
     public static class BackupData {
@@ -243,6 +245,7 @@ public final class BackupManager {
         p.reminderMinutesBefore = prefsMgr.getReminderMinutesBefore();
         p.morningDigestEnabled = prefsMgr.isMorningDigestEnabled();
         p.liveLessonNotifEnabled = prefsMgr.isLiveLessonNotificationEnabled();
+        p.autoSyncEnabled = prefsMgr.isAutoSyncEnabled();
         data.prefs = p;
 
         return writeZipBackup(data, photoFilesByName, outputStream);
@@ -329,18 +332,20 @@ public final class BackupManager {
             // 5. Восстанавливаем перезачёты
             new ExcludedSubjectsManager(appCtx).replaceAllExcludedSubjects(data.excludedSubjects);
 
-            // 6. Восстанавливаем избранное
+            // 6. Восстанавливаем избранное и ярлыки приложения
             FavoritesManager.replaceFavorites(appCtx, data.favorites);
+            AppShortcutsHelper.syncDynamicShortcuts(appCtx);
 
             // 7. Восстанавливаем настройки
             boolean prefsRestored = applyUserPrefs(appCtx, data.prefs);
 
-            // 8. Обновляем логику, виджеты и уведомления
+            // 8. Обновляем логику, виджеты, уведомления и автосинхронизацию
             ScheduleRepository.getInstance(appCtx).refreshLogic();
             WidgetUpdateHelper.updateAllWidgets(appCtx);
             try {
                 ReminderScheduler.rescheduleAll(appCtx);
                 LiveLessonService.syncNow(appCtx);
+                AutoSyncScheduler.syncScheduleState(appCtx);
             } catch (Exception ignored) {
                 // Уведомления могут быть недоступны при отсутствии разрешений
             }
@@ -408,6 +413,10 @@ public final class BackupManager {
         }
         if (p.liveLessonNotifEnabled != null) {
             prefsMgr.setLiveLessonNotificationEnabled(p.liveLessonNotifEnabled);
+            any = true;
+        }
+        if (p.autoSyncEnabled != null) {
+            prefsMgr.setAutoSyncEnabled(p.autoSyncEnabled);
             any = true;
         }
         return any;
@@ -725,6 +734,7 @@ public final class BackupManager {
                 if (data.prefs.reminderMinutesBefore != null) prefsObj.put("reminderMinutesBefore", data.prefs.reminderMinutesBefore);
                 if (data.prefs.morningDigestEnabled != null) prefsObj.put("morningDigestEnabled", data.prefs.morningDigestEnabled);
                 if (data.prefs.liveLessonNotifEnabled != null) prefsObj.put("liveLessonNotifEnabled", data.prefs.liveLessonNotifEnabled);
+                if (data.prefs.autoSyncEnabled != null) prefsObj.put("autoSyncEnabled", data.prefs.autoSyncEnabled);
             }
             root.put("prefs", prefsObj);
 
@@ -895,6 +905,9 @@ public final class BackupManager {
                 }
                 if (prefsObj.has("liveLessonNotifEnabled") && !prefsObj.isNull("liveLessonNotifEnabled")) {
                     p.liveLessonNotifEnabled = prefsObj.optBoolean("liveLessonNotifEnabled");
+                }
+                if (prefsObj.has("autoSyncEnabled") && !prefsObj.isNull("autoSyncEnabled")) {
+                    p.autoSyncEnabled = prefsObj.optBoolean("autoSyncEnabled");
                 }
                 data.prefs = p;
             }
