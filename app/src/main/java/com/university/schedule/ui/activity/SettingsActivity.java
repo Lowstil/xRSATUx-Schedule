@@ -37,6 +37,7 @@ import com.university.schedule.R;
 import com.university.schedule.data.ScheduleRepository;
 import com.university.schedule.logic.SemesterManager;
 import com.university.schedule.logic.WeekCalculator;
+import com.university.schedule.notification.AutoSyncScheduler;
 import com.university.schedule.notification.LiveLessonService;
 import com.university.schedule.notification.ReminderScheduler;
 import com.university.schedule.ui.dialog.BellScheduleDialog;
@@ -74,7 +75,8 @@ public class SettingsActivity extends AppCompatActivity {
     private TextView tvAboutVersion, tvAboutLastUpdated;
     private MaterialButton btnRefresh;
     private MaterialButtonToggleGroup toggleTheme;
-    private SwitchMaterial switchLessonReminder, switchMorningDigest, switchLiveLessonNotif, switchReducedTransparency;
+    private SwitchMaterial switchLessonReminder, switchMorningDigest, switchLiveLessonNotif,
+            switchAutoSync, switchReducedTransparency;
     private MaterialButtonToggleGroup toggleReminderMinutes;
     private View cardExcludedSubjects;
     private AmbientBackdropView ambientBackdrop;
@@ -118,6 +120,7 @@ public class SettingsActivity extends AppCompatActivity {
         switchLessonReminder = findViewById(R.id.switchLessonReminder);
         toggleReminderMinutes = findViewById(R.id.toggleReminderMinutes);
         switchMorningDigest = findViewById(R.id.switchMorningDigest);
+        switchAutoSync = findViewById(R.id.switchAutoSync);
         switchReducedTransparency = findViewById(R.id.switchReducedTransparency);
 
         cardExcludedSubjects = findViewById(R.id.cardExcludedSubjects);
@@ -211,6 +214,9 @@ public class SettingsActivity extends AppCompatActivity {
         else toggleReminderMinutes.check(R.id.btnReminder15);
 
         switchMorningDigest.setChecked(prefs.isMorningDigestEnabled());
+        if (switchAutoSync != null) {
+            switchAutoSync.setChecked(prefs.isAutoSyncEnabled());
+        }
         suppressReminderCallback = false;
 
         switchLiveLessonNotif.setOnCheckedChangeListener((btn, isChecked) -> {
@@ -242,6 +248,15 @@ public class SettingsActivity extends AppCompatActivity {
             if (isChecked) checkNotificationPermission();
             ReminderScheduler.scheduleMorningDigest(this);
         });
+
+        if (switchAutoSync != null) {
+            switchAutoSync.setOnCheckedChangeListener((btn, isChecked) -> {
+                if (suppressReminderCallback) return;
+                prefs.setAutoSyncEnabled(isChecked);
+                if (isChecked) checkNotificationPermission();
+                ex.execute(() -> AutoSyncScheduler.syncScheduleState(this));
+            });
+        }
     }
 
     private void checkNotificationPermission() {

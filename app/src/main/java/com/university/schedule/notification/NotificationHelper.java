@@ -22,10 +22,12 @@ public final class NotificationHelper {
     public static final String CHANNEL_REMINDERS = "channel_lesson_reminders";
     public static final String CHANNEL_DIGEST = "channel_morning_digest";
     public static final String CHANNEL_TRANSFERS = "channel_transfers";
+    public static final String CHANNEL_SCHEDULE_CHANGES = "schedule_changes";
 
     private static final int ID_REMINDER = 1001;
     private static final int ID_DIGEST = 1002;
     private static final int ID_TRANSFER = 1003;
+    private static final int ID_SCHEDULE_CHANGES = 1004;
 
     private NotificationHelper() {
     }
@@ -58,9 +60,18 @@ public final class NotificationHelper {
             cTransfers.setDescription("Оповещения об отменах и переносах занятий");
             cTransfers.enableVibration(true);
 
+            NotificationChannel cChanges = new NotificationChannel(
+                    CHANNEL_SCHEDULE_CHANGES,
+                    "Автосинхронизация расписания",
+                    NotificationManager.IMPORTANCE_HIGH
+            );
+            cChanges.setDescription("Уведомления о найденных в фоне изменениях расписания и переносах");
+            cChanges.enableVibration(true);
+
             nm.createNotificationChannel(cReminders);
             nm.createNotificationChannel(cDigest);
             nm.createNotificationChannel(cTransfers);
+            nm.createNotificationChannel(cChanges);
         }
     }
 
@@ -156,6 +167,35 @@ public final class NotificationHelper {
         NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm != null && canPostNotifications(context)) {
             nm.notify(ID_TRANSFER, b.build());
+        }
+    }
+
+    public static void sendScheduleChangesNotification(Context context, String title,
+                                                       String summary, String bigText) {
+        initChannels(context);
+        Intent intent = new Intent(context, MainActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent pi = PendingIntent.getActivity(context, ID_SCHEDULE_CHANGES, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+        String contentText = (summary != null && !summary.isEmpty()) ? summary : bigText;
+        String expandedText = (bigText != null && !bigText.isEmpty()) ? bigText : contentText;
+
+        NotificationCompat.Builder b = new NotificationCompat.Builder(context, CHANNEL_SCHEDULE_CHANGES)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle(title)
+                .setContentText(contentText)
+                .setStyle(new NotificationCompat.BigTextStyle()
+                        .setBigContentTitle(title)
+                        .bigText(expandedText))
+                .setColor(ContextCompat.getColor(context, R.color.accent))
+                .setAutoCancel(true)
+                .setContentIntent(pi)
+                .setPriority(NotificationCompat.PRIORITY_HIGH);
+
+        NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm != null && canPostNotifications(context)) {
+            nm.notify(ID_SCHEDULE_CHANGES, b.build());
         }
     }
 

@@ -22,6 +22,7 @@ public class BootReceiver extends BroadcastReceiver {
             EXECUTOR.execute(() -> {
                 try {
                     ReminderScheduler.rescheduleAll(appCtx);
+                    AutoSyncScheduler.syncScheduleState(appCtx);
                 } finally {
                     if (pendingResult != null) {
                         pendingResult.finish();
