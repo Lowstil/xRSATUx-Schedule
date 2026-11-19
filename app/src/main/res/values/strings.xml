@@ -44,4 +44,11 @@
     <string name="shortcut_homework_short">Хаб домашек</string>
     <string name="shortcut_homework_long">Хаб домашек</string>
     <string name="shortcut_disabled_message">Ярлык недоступен</string>
+
+    <string name="view_mode_day">День</string>
+    <string name="view_mode_week">Неделя</string>
+    <string name="week_grid_empty_week">На этой неделе занятий нет</string>
+    <string name="week_grid_check_now">Проверить сейчас</string>
+    <string name="week_grid_jump_to_day">Перейти ко дню →</string>
+    <string name="week_grid_open_note">Заметка</string>
 </resources>
