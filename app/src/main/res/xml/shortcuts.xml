@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <shortcut
+        android:shortcutId="shortcut_free_rooms"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_free_rooms"
+        android:shortcutShortLabel="@string/shortcut_free_rooms_short"
+        android:shortcutLongLabel="@string/shortcut_free_rooms_long"
+        android:shortcutDisabledMessage="@string/shortcut_disabled_message">
+        <intent
+            android:action="com.university.schedule.action.SHORTCUT_FREE_ROOMS"
+            android:targetPackage="com.university.schedule"
+            android:targetClass="com.university.schedule.ui.activity.SplashActivity" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="shortcut_find_teacher"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_teacher"
+        android:shortcutShortLabel="@string/shortcut_find_teacher_short"
+        android:shortcutLongLabel="@string/shortcut_find_teacher_long"
+        android:shortcutDisabledMessage="@string/shortcut_disabled_message">
+        <intent
+            android:action="com.university.schedule.action.SHORTCUT_FIND_TEACHER"
+            android:targetPackage="com.university.schedule"
+            android:targetClass="com.university.schedule.ui.activity.SplashActivity" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="shortcut_homework"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_homework"
+        android:shortcutShortLabel="@string/shortcut_homework_short"
+        android:shortcutLongLabel="@string/shortcut_homework_long"
+        android:shortcutDisabledMessage="@string/shortcut_disabled_message">
+        <intent
+            android:action="com.university.schedule.action.SHORTCUT_HOMEWORK"
+            android:targetPackage="com.university.schedule"
+            android:targetClass="com.university.schedule.ui.activity.SplashActivity" />
+    </shortcut>
+
+</shortcuts>

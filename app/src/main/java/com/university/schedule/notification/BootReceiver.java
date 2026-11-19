@@ -4,6 +4,8 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 
+import com.university.schedule.widget.WidgetUpdateHelper;
+
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -22,6 +24,8 @@ public class BootReceiver extends BroadcastReceiver {
             EXECUTOR.execute(() -> {
                 try {
                     ReminderScheduler.rescheduleAll(appCtx);
+                    WidgetUpdateHelper.updateAllWidgets(appCtx);
+                    LiveLessonService.syncNow(appCtx);
                 } finally {
                     if (pendingResult != null) {
                         pendingResult.finish();

@@ -27,4 +27,12 @@
     <string name="settings_clear">Очистить все данные</string>
     <string name="action_settings">Настройки</string>
     <string name="action_refresh">Обновить</string>
+
+    <string name="shortcut_free_rooms_short">Свободные ауд.</string>
+    <string name="shortcut_free_rooms_long">Свободные аудитории</string>
+    <string name="shortcut_find_teacher_short">Преподаватель</string>
+    <string name="shortcut_find_teacher_long">Где преподаватель?</string>
+    <string name="shortcut_homework_short">Хаб домашек</string>
+    <string name="shortcut_homework_long">Хаб домашек</string>
+    <string name="shortcut_disabled_message">Ярлык недоступен</string>
 </resources>

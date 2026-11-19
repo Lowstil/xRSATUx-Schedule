@@ -6,6 +6,7 @@ import android.util.Log;
 
 import com.university.schedule.BuildConfig;
 import com.university.schedule.data.ScheduleRepository;
+import com.university.schedule.util.AppShortcutsHelper;
 import com.university.schedule.util.ThemeManager;
 
 import java.util.concurrent.Executors;
@@ -44,6 +45,7 @@ public class ScheduleApplication extends Application {
         com.university.schedule.notification.ReminderScheduler.rescheduleAll(this);
         Executors.newSingleThreadExecutor().execute(() -> {
             ScheduleRepository.getInstance(this);
+            AppShortcutsHelper.syncDynamicShortcuts(this);
             Log.d(TAG, "ScheduleRepository прогрет в фоне");
         });
         Log.d(TAG, "UniSchedule запущен");
