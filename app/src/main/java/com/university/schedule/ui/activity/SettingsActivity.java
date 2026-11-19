@@ -19,6 +19,8 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
@@ -45,12 +47,17 @@ import com.university.schedule.ui.dialog.ScheduleDiffDialog;
 import com.university.schedule.ui.glass.AmbientBackdropView;
 import com.university.schedule.ui.glass.GlassSurfaceHelper;
 import com.university.schedule.util.AppError;
+import com.university.schedule.util.BackupManager;
 import com.university.schedule.util.DateUtils;
 import com.university.schedule.util.EdgeToEdgeCompat;
 import com.university.schedule.util.ExcludedSubjectsManager;
 import com.university.schedule.util.PrefsManager;
 import com.university.schedule.util.ScheduleExporter;
 import com.university.schedule.util.ThemeManager;
+import com.university.schedule.widget.WidgetUpdateHelper;
+
+import java.io.InputStream;
+import java.io.OutputStream;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -73,6 +80,9 @@ public class SettingsActivity extends AppCompatActivity {
     private TextView tvSel, tvSelectedSemester, tvSem, tvUpd, tvTransfersUpd;
     private TextView tvAboutVersion, tvAboutLastUpdated;
     private MaterialButton btnRefresh;
+    private MaterialButton btnExportBackup, btnImportBackup;
+    private ActivityResultLauncher<String> exportBackupLauncher;
+    private ActivityResultLauncher<String[]> importBackupLauncher;
     private MaterialButtonToggleGroup toggleTheme;
     private SwitchMaterial switchLessonReminder, switchMorningDigest, switchLiveLessonNotif, switchReducedTransparency;
     private MaterialButtonToggleGroup toggleReminderMinutes;
@@ -158,6 +168,22 @@ public class SettingsActivity extends AppCompatActivity {
 
         findViewById(R.id.btnClearData).setOnClickListener(v -> showClearDataDialog());
 
+        btnExportBackup = findViewById(R.id.btnExportBackup);
+        btnImportBackup = findViewById(R.id.btnImportBackup);
+        setupBackupLaunchers();
+        if (btnExportBackup != null) {
+            btnExportBackup.setOnClickListener(v -> {
+                try {
+                    exportBackupLauncher.launch(BackupManager.suggestedBackupFileName());
+                } catch (Exception e) {
+                    Toast.makeText(this, "Не удалось открыть выбор файла", Toast.LENGTH_SHORT).show();
+                }
+            });
+        }
+        if (btnImportBackup != null) {
+            btnImportBackup.setOnClickListener(v -> showImportBackupConfirmDialog());
+        }
+
         setupThemeToggle();
         setupGlassSettings();
         setupNotificationSettings();
@@ -175,6 +201,7 @@ public class SettingsActivity extends AppCompatActivity {
                 R.id.cardNotifications,
                 R.id.cardSemester,
                 R.id.cardAppearance,
+                R.id.cardBackup,
                 R.id.cardData,
                 R.id.cardAboutApp
         };
@@ -613,6 +640,242 @@ public class SettingsActivity extends AppCompatActivity {
         if (dialog == null) return;
         activeDialogs.add(dialog);
         dialog.setOnDismissListener(d -> activeDialogs.remove(dialog));
+    }
+
+    private void setupBackupLaunchers() {
+        exportBackupLauncher = registerForActivityResult(
+                new ActivityResultContracts.CreateDocument("application/zip"),
+                uri -> {
+                    if (uri == null) return;
+                    runBackupExport(uri);
+                }
+        );
+        importBackupLauncher = registerForActivityResult(
+                new ActivityResultContracts.OpenDocument(),
+                uri -> {
+                    if (uri == null) return;
+                    runBackupImport(uri);
+                }
+        );
+    }
+
+    private void setBackupButtonsBusy(boolean busy, boolean isExport) {
+        if (btnExportBackup != null) {
+            btnExportBackup.setEnabled(!busy);
+            btnExportBackup.setText(busy && isExport
+                    ? R.string.settings_backup_exporting
+                    : R.string.settings_backup_export);
+        }
+        if (btnImportBackup != null) {
+            btnImportBackup.setEnabled(!busy);
+            btnImportBackup.setText(busy && !isExport
+                    ? R.string.settings_backup_importing
+                    : R.string.settings_backup_import);
+        }
+    }
+
+    private void runBackupExport(Uri uri) {
+        setBackupButtonsBusy(true, true);
+        ex.execute(() -> {
+            try (OutputStream os = getContentResolver().openOutputStream(uri)) {
+                BackupManager.BackupSummary summary = BackupManager.exportToZip(this, os);
+                runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    setBackupButtonsBusy(false, true);
+                    Toast.makeText(this, summary.formatExportSummary(), Toast.LENGTH_LONG).show();
+                });
+            } catch (Exception e) {
+                String msg = e.getMessage() != null && !e.getMessage().isEmpty()
+                        ? e.getMessage()
+                        : "Не удалось сохранить бэкап";
+                runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    setBackupButtonsBusy(false, true);
+                    Toast.makeText(this, "Ошибка экспорта: " + msg, Toast.LENGTH_LONG).show();
+                });
+            }
+        });
+    }
+
+    private void runBackupImport(Uri uri) {
+        setBackupButtonsBusy(true, false);
+        ex.execute(() -> {
+            try (InputStream is = getContentResolver().openInputStream(uri)) {
+                BackupManager.BackupSummary summary = BackupManager.importFromStream(this, is);
+                runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    setBackupButtonsBusy(false, false);
+                    ThemeManager.applySavedMode(this);
+                    syncUiFromPrefs();
+                    WidgetUpdateHelper.updateAllWidgets(this);
+                    showBackupSummaryDialog("Восстановление завершено", summary.formatImportSummary());
+                });
+            } catch (Exception e) {
+                String msg = e.getMessage() != null && !e.getMessage().isEmpty()
+                        ? e.getMessage()
+                        : "Не удалось восстановить данные";
+                runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    setBackupButtonsBusy(false, false);
+                    showBackupSummaryDialog("Ошибка восстановления", msg);
+                });
+            }
+        });
+    }
+
+    private void syncUiFromPrefs() {
+        suppressThemeCallback = true;
+        int saved = ThemeManager.getSavedMode(this);
+        if (saved == ThemeManager.MODE_LIGHT) toggleTheme.check(R.id.btnThemeLight);
+        else if (saved == ThemeManager.MODE_DARK) toggleTheme.check(R.id.btnThemeDark);
+        else toggleTheme.check(R.id.btnThemeSystem);
+        suppressThemeCallback = false;
+
+        suppressGlassCallback = true;
+        switchReducedTransparency.setChecked(prefs.isReducedTransparency());
+        suppressGlassCallback = false;
+
+        suppressReminderCallback = true;
+        switchLiveLessonNotif.setChecked(prefs.isLiveLessonNotificationEnabled());
+        switchLessonReminder.setChecked(prefs.isRemindersEnabled());
+        int mins = prefs.getReminderMinutesBefore();
+        if (mins == 10) toggleReminderMinutes.check(R.id.btnReminder10);
+        else if (mins == 30) toggleReminderMinutes.check(R.id.btnReminder30);
+        else toggleReminderMinutes.check(R.id.btnReminder15);
+        switchMorningDigest.setChecked(prefs.isMorningDigestEnabled());
+        suppressReminderCallback = false;
+
+        if (ambientBackdrop != null) {
+            ambientBackdrop.reloadPreferences();
+        }
+        setupExcludedSubjects();
+        applyGlassCards();
+        updateInfo();
+    }
+
+    private void showImportBackupConfirmDialog() {
+        float density = getResources().getDisplayMetrics().density;
+        int pad = Math.round(20f * density);
+
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(pad, pad, pad, pad);
+
+        TextView tvTitle = new TextView(this);
+        tvTitle.setText("Восстановить из файла?");
+        tvTitle.setTextColor(ContextCompat.getColor(this, R.color.glass_text_primary));
+        tvTitle.setTextSize(18f);
+        tvTitle.setTypeface(tvTitle.getTypeface(), android.graphics.Typeface.BOLD);
+        root.addView(tvTitle);
+
+        TextView tvMessage = new TextView(this);
+        tvMessage.setText("Текущие заметки, личные события, отметки посещаемости, перезачёты, избранное и настройки будут заменены данными из файла бэкапа (.zip или .json).");
+        tvMessage.setTextColor(ContextCompat.getColor(this, R.color.glass_text_secondary));
+        tvMessage.setTextSize(14f);
+        LinearLayout.LayoutParams msgLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        msgLp.topMargin = Math.round(8f * density);
+        root.addView(tvMessage, msgLp);
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams actionsLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        actionsLp.topMargin = Math.round(18f * density);
+        root.addView(actions, actionsLp);
+
+        MaterialButton btnCancel = new MaterialButton(
+                this,
+                null,
+                com.google.android.material.R.attr.materialButtonOutlinedStyle
+        );
+        btnCancel.setText("Отмена");
+        btnCancel.setCornerRadius(Math.round(23f * density));
+        btnCancel.setTextColor(ContextCompat.getColor(this, R.color.glass_text_primary));
+        btnCancel.setStrokeColor(ColorStateList.valueOf(ContextCompat.getColor(this, R.color.glass_stroke_start)));
+        btnCancel.setBackgroundTintList(ColorStateList.valueOf(ContextCompat.getColor(this, R.color.glass_capsule)));
+        LinearLayout.LayoutParams cancelLp = new LinearLayout.LayoutParams(0, Math.round(46f * density), 1f);
+        cancelLp.setMarginEnd(Math.round(8f * density));
+        actions.addView(btnCancel, cancelLp);
+
+        MaterialButton btnChoose = new MaterialButton(this);
+        btnChoose.setText("Выбрать файл");
+        btnChoose.setCornerRadius(Math.round(23f * density));
+        btnChoose.setTextColor(Color.WHITE);
+        btnChoose.setBackgroundTintList(ColorStateList.valueOf(ContextCompat.getColor(this, R.color.glass_accent)));
+        LinearLayout.LayoutParams chooseLp = new LinearLayout.LayoutParams(0, Math.round(46f * density), 1f);
+        actions.addView(btnChoose, chooseLp);
+
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setView(root)
+                .create();
+
+        btnCancel.setOnClickListener(v -> dialog.dismiss());
+        btnChoose.setOnClickListener(v -> {
+            dialog.dismiss();
+            try {
+                importBackupLauncher.launch(new String[]{"application/zip", "application/json", "*/*"});
+            } catch (Exception e) {
+                Toast.makeText(this, "Не удалось открыть выбор файла", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        trackDialog(dialog);
+        dialog.show();
+        GlassSurfaceHelper.applyGlassDialog(dialog, root);
+    }
+
+    private void showBackupSummaryDialog(String title, String message) {
+        float density = getResources().getDisplayMetrics().density;
+        int pad = Math.round(20f * density);
+
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(pad, pad, pad, pad);
+
+        TextView tvTitle = new TextView(this);
+        tvTitle.setText(title);
+        tvTitle.setTextColor(ContextCompat.getColor(this, R.color.glass_text_primary));
+        tvTitle.setTextSize(18f);
+        tvTitle.setTypeface(tvTitle.getTypeface(), android.graphics.Typeface.BOLD);
+        root.addView(tvTitle);
+
+        TextView tvMessage = new TextView(this);
+        tvMessage.setText(message);
+        tvMessage.setTextColor(ContextCompat.getColor(this, R.color.glass_text_secondary));
+        tvMessage.setTextSize(14f);
+        LinearLayout.LayoutParams msgLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        msgLp.topMargin = Math.round(10f * density);
+        root.addView(tvMessage, msgLp);
+
+        MaterialButton btnOk = new MaterialButton(this);
+        btnOk.setText("Готово");
+        btnOk.setCornerRadius(Math.round(23f * density));
+        btnOk.setTextColor(Color.WHITE);
+        btnOk.setBackgroundTintList(ColorStateList.valueOf(ContextCompat.getColor(this, R.color.glass_accent)));
+        LinearLayout.LayoutParams okLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                Math.round(46f * density)
+        );
+        okLp.topMargin = Math.round(18f * density);
+        root.addView(btnOk, okLp);
+
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setView(root)
+                .create();
+
+        btnOk.setOnClickListener(v -> dialog.dismiss());
+
+        trackDialog(dialog);
+        dialog.show();
+        GlassSurfaceHelper.applyGlassDialog(dialog, root);
     }
 
     @Override

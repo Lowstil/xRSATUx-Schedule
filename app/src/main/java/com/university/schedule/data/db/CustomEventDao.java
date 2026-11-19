@@ -43,6 +43,27 @@ public class CustomEventDao {
         db.delete(CustomEventEntry.TABLE_NAME, null, null);
     }
 
+    public void replaceAll(List<CustomEvent> events) {
+        SQLiteDatabase db = dbHelper.getWritableDatabase();
+        db.beginTransaction();
+        try {
+            db.delete(CustomEventEntry.TABLE_NAME, null, null);
+            if (events != null) {
+                for (CustomEvent event : events) {
+                    if (event == null || event.getGroupName() == null) continue;
+                    String target = event.getGroupName().trim();
+                    if (target.isEmpty()) continue;
+                    event.setGroupName(target);
+                    long id = db.insert(CustomEventEntry.TABLE_NAME, null, toContentValues(event));
+                    event.setId(id);
+                }
+            }
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+    }
+
     public List<CustomEvent> getAll() {
         return query(null, null);
     }
