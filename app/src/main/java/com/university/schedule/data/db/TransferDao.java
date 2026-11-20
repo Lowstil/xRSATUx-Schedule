@@ -66,6 +66,22 @@ public class TransferDao {
         return query(selection, new String[]{isoDateFrom, isoDateTo});
     }
 
+    /** Все переносы начиная с указанной даты включительно (отсортированы по дате и номеру пары). */
+    public List<TransferItem> getFromDate(String isoDateFrom) {
+        if (isoDateFrom == null) return new ArrayList<>();
+        List<TransferItem> result = new ArrayList<>();
+        SQLiteDatabase db = dbHelper.getReadableDatabase();
+        String selection = TransferEntry.COLUMN_DATE + " >= ?";
+        String orderBy = TransferEntry.COLUMN_DATE + " ASC, " + TransferEntry.COLUMN_LESSON_NUMBER + " ASC";
+        try (Cursor cursor = db.query(
+                TransferEntry.TABLE_NAME, null, selection, new String[]{isoDateFrom}, null, null, orderBy)) {
+            while (cursor.moveToNext()) {
+                result.add(fromCursor(cursor));
+            }
+        }
+        return result;
+    }
+
     public boolean isEmpty() {
         SQLiteDatabase db = dbHelper.getReadableDatabase();
         try (Cursor cursor = db.rawQuery("SELECT COUNT(*) FROM " + TransferEntry.TABLE_NAME, null)) {

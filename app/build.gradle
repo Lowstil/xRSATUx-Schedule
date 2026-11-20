@@ -12,8 +12,8 @@ android {
         // это только при --min-api 26+, desugaring не помогает.
         minSdkVersion 26
         targetSdk 36
-        versionCode 4
-        versionName "3.3.1"
+        versionCode 5
+        versionName "3.4"
     }
     buildTypes {
         release { minifyEnabled false }
@@ -48,9 +48,11 @@ dependencies {
     implementation 'androidx.cardview:cardview:1.0.0'
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
     implementation 'androidx.viewpager2:viewpager2:1.0.0'
+    implementation 'androidx.work:work-runtime:2.9.1'
     implementation('org.apache.poi:poi:5.2.5') { exclude group: 'org.apache.commons', module: 'commons-compress' }
     implementation('org.apache.poi:poi-ooxml:5.2.5') { exclude group: 'org.apache.commons', module: 'commons-compress' }
     implementation 'org.apache.commons:commons-compress:1.26.1'
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20240303'
 }

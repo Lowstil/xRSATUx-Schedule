@@ -9,6 +9,7 @@ import com.university.schedule.R;
 import com.university.schedule.data.ScheduleRepository;
 import com.university.schedule.ui.glass.GlassSurfaceHelper;
 import com.university.schedule.util.AppError;
+import com.university.schedule.util.AppShortcutsHelper;
 import com.university.schedule.util.EdgeToEdgeCompat;
 import com.university.schedule.util.PrefsManager;
 
@@ -46,7 +47,12 @@ public class SplashActivity extends AppCompatActivity {
         }
         runOnUiThread(() -> {
             if (isFinishing() || isDestroyed()) return;
-            startActivity(new Intent(this, target));
+            Intent nextIntent = new Intent(this, target);
+            if (target == MainActivity.class && AppShortcutsHelper.hasShortcutRequest(getIntent())) {
+                AppShortcutsHelper.copyShortcutExtras(getIntent(), nextIntent);
+                nextIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            }
+            startActivity(nextIntent);
             finish();
         });
 

@@ -45,6 +45,24 @@ void onSuccess();
 void onError(AppError error);
 void onProgress(String message);
 }
+public static final class BackgroundSyncResult {
+public final ScheduleDiff scheduleDiff;
+public final List<TransferItem> newTransfers;
+public final boolean dataChanged;
+public final boolean fromAssetsFallback;
+
+public BackgroundSyncResult(ScheduleDiff scheduleDiff, List<TransferItem> newTransfers,
+                            boolean dataChanged, boolean fromAssetsFallback) {
+this.scheduleDiff = scheduleDiff;
+this.newTransfers = newTransfers != null ? newTransfers : Collections.emptyList();
+this.dataChanged = dataChanged;
+this.fromAssetsFallback = fromAssetsFallback;
+}
+
+public boolean hasUserVisibleChanges() {
+return (scheduleDiff != null && scheduleDiff.hasChanges()) || !newTransfers.isEmpty();
+}
+}
 private final Context context;
 private final ScheduleDao scheduleDao;
 private final UserDao userDao;
@@ -174,6 +192,51 @@ Log.e(TAG, "Ошибка загрузки", e);
 cb.onError(AppError.from(e));
 }
 }
+public BackgroundSyncResult syncInBackgroundSync() throws Exception {
+String activeSemBefore = getActiveSemesterId();
+String oldHash = prefsManager.getSemesterHash(activeSemBefore);
+File file = networkClient.downloadScheduleSync();
+String newHash = networkClient.getLastDownloadedHash();
+boolean fromAssets = networkClient.lastFetchFromAssets();
+ScheduleDiff diff = parseAndSaveInternal(file, NOOP, newHash);
+if (!fromAssets) {
+prefsManager.saveLastUpdated(DateUtils.nowIsoDateTime());
+}
+userDao.touchLastUpdated();
+boolean scheduleChanged = (newHash != null && !newHash.equals(oldHash))
+|| (diff != null && diff.hasChanges());
+
+String selType = prefsManager.getSelectionType();
+String selName = prefsManager.getSelectionName();
+String todayIso = DateUtils.toIsoString(DateUtils.todayMoscow());
+boolean hadPreviousTransfersSync = prefsManager.getTransfersLastUpdated() != null;
+List<TransferItem> oldUserTransfers = com.university.schedule.notification.ScheduleChangeFormatter
+.filterTransfersForSelection(transferDao.getFromDate(todayIso), selType, selName);
+
+List<TransferItem> addedTransfers = Collections.emptyList();
+boolean transfersChanged = false;
+try {
+File transfersFile = networkClient.downloadTransfersSync();
+parseAndSaveTransfers(transfersFile, NOOP);
+prefsManager.saveTransfersLastUpdated(DateUtils.nowIsoDateTime());
+List<TransferItem> newUserTransfers = com.university.schedule.notification.ScheduleChangeFormatter
+.filterTransfersForSelection(transferDao.getFromDate(todayIso), selType, selName);
+if (hadPreviousTransfersSync) {
+addedTransfers = com.university.schedule.notification.ScheduleChangeFormatter
+.findNewTransfers(oldUserTransfers, newUserTransfers);
+}
+transfersChanged = !addedTransfers.isEmpty() || oldUserTransfers.size() != newUserTransfers.size();
+} catch (Exception e) {
+Log.w(TAG, "Фоновая синхронизация: не удалось обновить переносы: " + e.getMessage());
+}
+
+boolean dataChanged = !fromAssets && (scheduleChanged || transfersChanged);
+if (dataChanged) {
+com.university.schedule.widget.WidgetUpdateHelper.updateAllWidgets(context);
+com.university.schedule.notification.ReminderScheduler.rescheduleAll(context);
+}
+return new BackgroundSyncResult(diff, addedTransfers, dataChanged, fromAssets);
+}
 public boolean shouldAutoRefresh() {
 LocalDateTime lastSuccess = DateUtils.parseIsoDateTime(prefsManager.getLastUpdated());
 LocalDateTime lastAttempt = DateUtils.parseIsoDateTime(prefsManager.getLastAutoRefreshAttempt());
@@ -198,6 +261,10 @@ parseAndSave(xlsx, cb, networkClient.getLastDownloadedHash());
 }
 
 public void parseAndSave(File xlsx, LoadCallback cb, String newHash) throws Exception {
+parseAndSaveInternal(xlsx, cb, newHash);
+}
+
+private ScheduleDiff parseAndSaveInternal(File xlsx, LoadCallback cb, String newHash) throws Exception {
 List<ScheduleItem> all = new ArrayList<>();
 try (FileInputStream is = new FileInputStream(xlsx)) {
 all.addAll(excelParser.parseGroups(is));
@@ -242,7 +309,9 @@ if (json != null) {
 prefsManager.saveScheduleDiffJson(json);
 }
 }
+return diff;
 }
+return null;
 }
 
 private String resolveTargetSemesterForDownload(String windowSem, LocalDate today, String newHash) {

@@ -168,6 +168,7 @@ public class PrefsManager {
     public static final String PREF_FIRST_LAUNCH = "pref_first_launch";
     public static final String PREF_REDUCED_TRANSPARENCY = "reduced_transparency";
     public static final String PREF_LIVE_LESSON_NOTIF_ENABLED = "live_lesson_notif_enabled";
+    public static final String PREF_AUTO_SYNC_ENABLED = "auto_sync_enabled";
     public static final String PREF_ATTENDANCE_SKIP_LIMIT_PCT = "attendance_skip_limit_pct";
     public static final String PREF_SCHEDULE_DIFF_JSON = "schedule_diff_json";
 
@@ -190,6 +191,13 @@ public class PrefsManager {
     }
     public void setLiveLessonNotificationEnabled(boolean v) {
         prefs.edit().putBoolean(PREF_LIVE_LESSON_NOTIF_ENABLED, v).apply();
+    }
+
+    public boolean isAutoSyncEnabled() {
+        return prefs.getBoolean(PREF_AUTO_SYNC_ENABLED, true);
+    }
+    public void setAutoSyncEnabled(boolean enabled) {
+        prefs.edit().putBoolean(PREF_AUTO_SYNC_ENABLED, enabled).apply();
     }
 
     public int getAttendanceSkipLimitPercent() {

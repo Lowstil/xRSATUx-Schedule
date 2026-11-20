@@ -68,7 +68,9 @@ import com.university.schedule.ui.dialog.RoomTeacherFinderDialog;
 import com.university.schedule.ui.dialog.ScheduleDiffDialog;
 import com.university.schedule.ui.glass.AmbientBackdropView;
 import com.university.schedule.ui.glass.GlassSurfaceHelper;
+import com.university.schedule.ui.view.WeekGridView;
 import com.university.schedule.util.AppError;
+import com.university.schedule.util.AppShortcutsHelper;
 import com.university.schedule.util.AttendanceManager;
 import com.university.schedule.util.Constants;
 import com.university.schedule.util.DateUtils;
@@ -76,6 +78,7 @@ import com.university.schedule.util.EdgeToEdgeCompat;
 import com.university.schedule.util.ExcludedSubjectsManager;
 import com.university.schedule.util.FavoritesManager;
 import com.university.schedule.util.PrefsManager;
+import com.university.schedule.util.RoomFormatter;
 import com.university.schedule.util.ScheduleClock;
 import com.university.schedule.util.SkippedLessonsManager;
 import com.university.schedule.widget.WidgetUpdateHelper;
@@ -87,6 +90,7 @@ import java.io.OutputStream;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -97,6 +101,7 @@ public class MainActivity extends AppCompatActivity {
     private static final String KEY_PENDING_PHOTO_DATE = "pending_photo_date";
     private static final String KEY_PENDING_PHOTO_LESSON = "pending_photo_lesson";
     private static final String KEY_PENDING_PHOTO_SUBJECT = "pending_photo_subject";
+    private static final String KEY_WEEK_GRID_MODE = "week_grid_mode";
 
     private LessonNoteDialog.PhotoCallback activePhotoCallback;
     private String pendingPhotoDateIso;
@@ -114,6 +119,8 @@ public class MainActivity extends AppCompatActivity {
     private AmbientBackdropView ambientBackdrop;
     private View headerContainer;
     private View toolbarTitleArea;
+    private View viewModeToggle;
+    private TextView btnModeDay, btnModeWeek;
     private View weekSwitcherCard;
     private TextView semesterToastPill;
     private View bottomDock;
@@ -126,6 +133,7 @@ public class MainActivity extends AppCompatActivity {
     private View staleBanner;
     private TabLayout tabLayout;
     private ViewPager2 viewPager;
+    private WeekGridView weekGridView;
     private SwipeRefreshLayout swipeRefresh;
     private ProgressBar progressBar;
     private TextView tvWeekInfo, tvSelectionName, tvSelectionType, tvTodayDate, tvMonthLabel, tvStaleBannerText;
@@ -137,6 +145,9 @@ public class MainActivity extends AppCompatActivity {
     private WeekCalculator calc;
     private WeekScheduleController weekController;
     private WeekSchedule currentWeek;
+    private final Map<String, Map<Integer, LessonNote>> weekNotesByDate = new HashMap<>();
+    private ScheduleClock.State lastClockState;
+    private boolean isWeekGridMode = false;
     private String activeSemesterId;
     private String selType, selName;
     private int weekNum, dayIndex;
@@ -177,6 +188,7 @@ public class MainActivity extends AppCompatActivity {
             pendingPhotoDateIso = s.getString(KEY_PENDING_PHOTO_DATE);
             pendingPhotoLessonNum = s.getInt(KEY_PENDING_PHOTO_LESSON, -1);
             pendingPhotoSubject = s.getString(KEY_PENDING_PHOTO_SUBJECT);
+            isWeekGridMode = s.getBoolean(KEY_WEEK_GRID_MODE, false);
         }
 
         repo = ScheduleRepository.getInstance(this);
@@ -195,6 +207,9 @@ public class MainActivity extends AppCompatActivity {
         ambientBackdrop = findViewById(R.id.ambientBackdrop);
         headerContainer = findViewById(R.id.headerContainer);
         toolbarTitleArea = findViewById(R.id.toolbarTitleArea);
+        viewModeToggle = findViewById(R.id.viewModeToggle);
+        btnModeDay = findViewById(R.id.btnModeDay);
+        btnModeWeek = findViewById(R.id.btnModeWeek);
         weekSwitcherCard = findViewById(R.id.weekSwitcherCard);
         semesterToastPill = findViewById(R.id.semesterToastPill);
         bottomDock = findViewById(R.id.bottomDock);
@@ -208,6 +223,7 @@ public class MainActivity extends AppCompatActivity {
         staleBanner = findViewById(R.id.staleBanner);
         tabLayout = findViewById(R.id.tabLayout);
         viewPager = findViewById(R.id.viewPager);
+        weekGridView = findViewById(R.id.weekGridView);
         swipeRefresh = findViewById(R.id.swipeRefresh);
         progressBar = findViewById(R.id.progressBar);
         tvWeekInfo = findViewById(R.id.tvWeekInfo);
@@ -328,6 +344,33 @@ public class MainActivity extends AppCompatActivity {
             refresh();
         });
 
+        if (btnModeDay != null) {
+            btnModeDay.setOnClickListener(v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+                setWeekGridMode(false);
+            });
+        }
+        if (btnModeWeek != null) {
+            btnModeWeek.setOnClickListener(v -> {
+                v.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+                setWeekGridMode(true);
+            });
+        }
+
+        if (weekGridView != null) {
+            weekGridView.setSemesterPublished(SemesterManager.SEMESTER_FALL, repo.isSemesterPublished(SemesterManager.SEMESTER_FALL));
+            weekGridView.setSemesterPublished(SemesterManager.SEMESTER_SPRING, repo.isSemesterPublished(SemesterManager.SEMESTER_SPRING));
+            weekGridView.setExcludedSubjects(excludedSubjectsManager.getExcludedSubjects(selName));
+            weekGridView.setSkippedLessonsManager(skippedLessonsManager);
+            weekGridView.setOnDayHeaderClickListener(this::jumpToDayFromWeekGrid);
+            weekGridView.setOnLessonCellClickListener(this::showWeekGridLessonPreview);
+            weekGridView.setOnLessonCellLongClickListener(this::showSkipLessonDialog);
+            weekGridView.setOnUnpublishedCheckListener(semId -> {
+                swipeRefresh.setRefreshing(true);
+                refresh();
+            });
+        }
+
         viewPager.setAdapter(pagerAdapter);
         viewPager.setOffscreenPageLimit(2);
         viewPager.setCurrentItem(DayPagerAdapter.positionOf(activeSemesterId, weekNum, dayIndex), false);
@@ -394,7 +437,9 @@ public class MainActivity extends AppCompatActivity {
         });
 
         swipeRefresh.setOnChildScrollUpCallback((parent, child) ->
-                pagerAdapter.canPageScrollUp(viewPager.getCurrentItem()));
+                isWeekGridMode
+                        ? (weekGridView != null && weekGridView.canScrollUp())
+                        : pagerAdapter.canPageScrollUp(viewPager.getCurrentItem()));
         swipeRefresh.setOnRefreshListener(this::refresh);
 
         btnPrev.setOnClickListener(v -> {
@@ -404,7 +449,7 @@ public class MainActivity extends AppCompatActivity {
                 currentWeek = weekController.getCachedWeek(weekNum, activeSemesterId);
                 updateWeekHeaderUi();
                 updateDayTabsForWeek();
-                selectPage(activeSemesterId, weekNum, 0, true);
+                selectPage(activeSemesterId, weekNum, 0, !isWeekGridMode);
                 loadWeek();
             } else if (SemesterManager.SEMESTER_SPRING.equals(activeSemesterId)) {
                 switchActiveSemester(SemesterManager.SEMESTER_FALL, true);
@@ -413,7 +458,7 @@ public class MainActivity extends AppCompatActivity {
                 currentWeek = weekController.getCachedWeek(weekNum, activeSemesterId);
                 updateWeekHeaderUi();
                 updateDayTabsForWeek();
-                selectPage(activeSemesterId, weekNum, 0, true);
+                selectPage(activeSemesterId, weekNum, 0, !isWeekGridMode);
                 loadWeek();
             }
         });
@@ -424,7 +469,7 @@ public class MainActivity extends AppCompatActivity {
                 currentWeek = weekController.getCachedWeek(weekNum, activeSemesterId);
                 updateWeekHeaderUi();
                 updateDayTabsForWeek();
-                selectPage(activeSemesterId, weekNum, 0, true);
+                selectPage(activeSemesterId, weekNum, 0, !isWeekGridMode);
                 loadWeek();
             } else if (SemesterManager.SEMESTER_FALL.equals(activeSemesterId)) {
                 switchActiveSemester(SemesterManager.SEMESTER_SPRING, true);
@@ -433,14 +478,104 @@ public class MainActivity extends AppCompatActivity {
                 currentWeek = weekController.getCachedWeek(weekNum, activeSemesterId);
                 updateWeekHeaderUi();
                 updateDayTabsForWeek();
-                selectPage(activeSemesterId, weekNum, 0, true);
+                selectPage(activeSemesterId, weekNum, 0, !isWeekGridMode);
                 loadWeek();
             }
         });
 
+        setWeekGridMode(isWeekGridMode);
         updateLastUpdatedBanner();
         updateFavoritesBar();
+        AppShortcutsHelper.syncDynamicShortcutsAsync(this);
         loadWeek();
+
+        if (s == null && AppShortcutsHelper.hasShortcutRequest(getIntent())) {
+            final Intent launchIntent = getIntent();
+            headerContainer.post(() -> {
+                if (!isFinishing() && !isDestroyed()) {
+                    handleShortcutIntent(launchIntent);
+                }
+            });
+        }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleShortcutIntent(intent);
+    }
+
+    private void handleShortcutIntent(Intent intent) {
+        String action = AppShortcutsHelper.extractShortcutAction(intent);
+        if (action == null || isFinishing() || isDestroyed()) return;
+
+        // Потребляем действие один раз, чтобы оно не повторялось при пересоздании Activity
+        intent.removeExtra(AppShortcutsHelper.EXTRA_SHORTCUT_ACTION);
+        if (AppShortcutsHelper.isShortcutAction(intent.getAction())) {
+            intent.setAction(null);
+        }
+
+        switch (action) {
+            case AppShortcutsHelper.ACTION_FREE_ROOMS:
+                RoomTeacherFinderDialog.showFreeRooms(this);
+                break;
+            case AppShortcutsHelper.ACTION_FIND_TEACHER:
+                RoomTeacherFinderDialog.show(this);
+                break;
+            case AppShortcutsHelper.ACTION_HOMEWORK:
+                HomeworkHubDialog.show(this, () -> {
+                    clearWeekCache();
+                    loadWeek();
+                    updateDockMoreBadge();
+                }, this::navigateToDate);
+                break;
+            case AppShortcutsHelper.ACTION_OPEN_FAVORITE: {
+                String favType = intent.getStringExtra(AppShortcutsHelper.EXTRA_FAVORITE_TYPE);
+                String favName = intent.getStringExtra(AppShortcutsHelper.EXTRA_FAVORITE_NAME);
+                if (favName != null && !favName.trim().isEmpty()) {
+                    String resolvedType = (favType != null && !favType.isEmpty())
+                            ? favType : GroupOrTeacher.TYPE_GROUP;
+                    if (switchSelection(resolvedType, favName.trim())) {
+                        Toast.makeText(this, "★ " + favName.trim(), Toast.LENGTH_SHORT).show();
+                    }
+                }
+                break;
+            }
+            default:
+                break;
+        }
+    }
+
+    private boolean switchSelection(String newType, String newName) {
+        if (newName == null || newName.trim().isEmpty()) return false;
+        String trimmedName = newName.trim();
+        String resolvedType = (newType != null && !newType.isEmpty())
+                ? newType : GroupOrTeacher.TYPE_GROUP;
+        if (trimmedName.equalsIgnoreCase(selName) && resolvedType.equals(selType)) {
+            return false;
+        }
+        selType = resolvedType;
+        selName = trimmedName;
+        repo.saveSelection(selType, selName);
+        if (excludedSubjectsManager != null) {
+            pagerAdapter.setExcludedSubjects(excludedSubjectsManager.getExcludedSubjects(selName));
+            if (weekGridView != null) {
+                weekGridView.setExcludedSubjects(excludedSubjectsManager.getExcludedSubjects(selName));
+            }
+        }
+        tvSelectionName.setText(selName);
+        tvSelectionType.setText(GroupOrTeacher.TYPE_GROUP.equals(selType) ? "Группа" : "Преподаватель");
+        clearWeekCache();
+        loadWeek();
+        updateFavoritesBar();
+        if (attendanceManager != null) {
+            attendanceManager.invalidateCache();
+        }
+        WidgetUpdateHelper.updateAllWidgets(this);
+        ReminderScheduler.rescheduleAll(this);
+        LiveLessonService.syncNow(this);
+        return true;
     }
 
     private void applyEdgeToEdgeInsets() {
@@ -460,6 +595,9 @@ public class MainActivity extends AppCompatActivity {
             if (pagerAdapter != null) {
                 pagerAdapter.setBottomInsetPx(bars.bottom + dpToPx(88));
             }
+            if (weekGridView != null) {
+                weekGridView.setBottomInsetPx(bars.bottom + dpToPx(88));
+            }
             return insets;
         });
 
@@ -470,12 +608,178 @@ public class MainActivity extends AppCompatActivity {
 
     private void applyGlassChrome() {
         GlassSurfaceHelper.applyGlassCard(toolbarTitleArea, 18f, false);
+        GlassSurfaceHelper.applyGlassCard(viewModeToggle, 999f, false);
         GlassSurfaceHelper.applyGlassCard(tvTodayDate, 999f, false);
         GlassSurfaceHelper.applyGlassCard(weekSwitcherCard, 20f, false);
         GlassSurfaceHelper.applyGlassCard(semesterToastPill, 999f, true);
         GlassSurfaceHelper.applyGlassCard(staleBanner, 16f, true);
         GlassSurfaceHelper.applyGlassCard(bottomDock, 999f, false);
         GlassSurfaceHelper.applyGlassCard(dockPairs, 999f, true);
+        updateViewModeToggleVisuals();
+        if (weekGridView != null) {
+            weekGridView.refreshStyle();
+        }
+    }
+
+    private void setWeekGridMode(boolean weekMode) {
+        isWeekGridMode = weekMode;
+        if (tabLayout != null) {
+            tabLayout.setVisibility(weekMode ? View.GONE : View.VISIBLE);
+        }
+        if (viewPager != null) {
+            viewPager.setVisibility(weekMode ? View.GONE : View.VISIBLE);
+        }
+        if (weekGridView != null) {
+            weekGridView.setVisibility(weekMode ? View.VISIBLE : View.GONE);
+        }
+        updateViewModeToggleVisuals();
+        if (weekMode) {
+            updateWeekGridUi();
+        }
+    }
+
+    private void updateViewModeToggleVisuals() {
+        if (btnModeDay == null || btnModeWeek == null) return;
+        int accent = ContextCompat.getColor(this, R.color.glass_accent);
+        int secondary = ContextCompat.getColor(this, R.color.glass_text_secondary);
+
+        if (isWeekGridMode) {
+            btnModeDay.setBackground(null);
+            btnModeDay.setElevation(0f);
+            btnModeDay.setTextColor(secondary);
+            GlassSurfaceHelper.applyGlassCard(btnModeWeek, 999f, true);
+            btnModeWeek.setTextColor(accent);
+        } else {
+            GlassSurfaceHelper.applyGlassCard(btnModeDay, 999f, true);
+            btnModeDay.setTextColor(accent);
+            btnModeWeek.setBackground(null);
+            btnModeWeek.setElevation(0f);
+            btnModeWeek.setTextColor(secondary);
+        }
+    }
+
+    private void updateWeekGridUi() {
+        if (weekGridView == null) return;
+        weekGridView.setSemesterPublished(SemesterManager.SEMESTER_FALL, repo.isSemesterPublished(SemesterManager.SEMESTER_FALL));
+        weekGridView.setSemesterPublished(SemesterManager.SEMESTER_SPRING, repo.isSemesterPublished(SemesterManager.SEMESTER_SPRING));
+        if (excludedSubjectsManager != null) {
+            weekGridView.setExcludedSubjects(excludedSubjectsManager.getExcludedSubjects(selName));
+        }
+        if (isWeekGridMode) {
+            weekGridView.bindWeek(currentWeek, weekNotesByDate, lastClockState, activeSemesterId, weekNum, calc);
+        }
+    }
+
+    private void jumpToDayFromWeekGrid(int targetDayIndex) {
+        if (targetDayIndex < 0 || targetDayIndex >= DayPagerAdapter.DAYS_PER_WEEK) return;
+        dayIndex = targetDayIndex;
+        setWeekGridMode(false);
+        selectPage(activeSemesterId, weekNum, dayIndex, false);
+    }
+
+    private void showWeekGridLessonPreview(ScheduleItem item, LocalDate date, LessonNote existingNote, int dayIdx) {
+        if (item == null || isFinishing() || isDestroyed()) return;
+
+        int displayDow = (date != null) ? DateUtils.toScheduleDayOfWeek(date) : item.getDayOfWeek();
+        String dayShort = (dayIdx >= 0 && dayIdx < Constants.DAY_NAMES_SHORT.length)
+                ? Constants.DAY_NAMES_SHORT[dayIdx] : "";
+        String datePart = date != null ? DateUtils.formatDisplayDateShort(date) : "";
+        String timeLabel = Constants.getLessonTimeLabel(displayDow, item.getLessonNumber());
+
+        StringBuilder meta = new StringBuilder();
+        if (!dayShort.isEmpty()) meta.append(dayShort);
+        if (!datePart.isEmpty()) {
+            if (meta.length() > 0) meta.append(", ");
+            meta.append(datePart);
+        }
+        if (item.getLessonNumber() > 0) {
+            if (meta.length() > 0) meta.append(" · ");
+            meta.append(item.getLessonNumber()).append(" пара");
+        }
+        if (!timeLabel.isEmpty()) {
+            meta.append(" · ").append(timeLabel);
+        }
+
+        if (item.isCustom()) {
+            meta.append("\n★ Личное событие");
+        } else if (item.getLessonType() != null && !item.getLessonType().trim().isEmpty()) {
+            meta.append("\nТип: ").append(item.getLessonType().trim());
+        }
+
+        if (item.getRoom() != null && !item.getRoom().trim().isEmpty()) {
+            RoomFormatter.RoomInfo ri = RoomFormatter.parse(item.getRoom(), false);
+            if (ri != null) {
+                meta.append("\nАудитория: ").append(ri.building);
+                if (ri.room != null && !ri.room.isEmpty()) {
+                    meta.append(", каб. ").append(ri.room);
+                }
+            } else {
+                meta.append("\nАудитория: ").append(item.getRoom().trim());
+            }
+        }
+
+        String person = "teacher".equals(item.getSource()) ? item.getGroupName() : item.getTeacherName();
+        if (person != null && !person.trim().isEmpty()) {
+            meta.append("\n")
+                    .append("teacher".equals(item.getSource()) ? "Группа: " : "Преподаватель: ")
+                    .append(person.trim());
+        }
+
+        if (item.isCancelled()) {
+            meta.append("\n⚠️ Отменено")
+                    .append(item.getTransferNote() != null && !item.getTransferNote().isEmpty()
+                            ? " (" + item.getTransferNote() + ")" : "");
+        } else if (skippedLessonsManager != null && date != null
+                && skippedLessonsManager.isSkipped(date, item.getLessonNumber(), item.getSubjectName())) {
+            meta.append("\n🔴 Отмечено как Н-ка");
+        } else if (item.isTransferred() && item.getTransferNote() != null && !item.getTransferNote().isEmpty()) {
+            meta.append("\n🔄 ").append(item.getTransferNote());
+        }
+
+        if (existingNote != null && existingNote.getNoteText() != null && !existingNote.getNoteText().trim().isEmpty()) {
+            meta.append("\n\n📝 ").append(existingNote.getNoteText().trim());
+        }
+
+        String title = item.getSubjectName() != null ? item.getSubjectName().trim() : "";
+        LinearLayout root = createGlassMessageDialogRoot(title, meta.toString());
+        LinearLayout actions = createGlassDialogActionsRow();
+
+        TextView btnNote = createGlassDialogButton(getString(R.string.week_grid_open_note), R.color.glass_text_primary, false);
+        TextView btnJump = createGlassDialogButton(getString(R.string.week_grid_jump_to_day), R.color.glass_accent, true);
+        LinearLayout.LayoutParams jumpLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        jumpLp.setMarginStart(dpToPx(10));
+        btnJump.setLayoutParams(jumpLp);
+
+        actions.addView(btnNote);
+        actions.addView(btnJump);
+        root.addView(actions);
+
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+                .setView(root)
+                .create();
+        trackDialog(dialog);
+
+        btnNote.setOnClickListener(v -> {
+            dialog.dismiss();
+            if (date != null) {
+                showLessonNoteDialog(item, date, existingNote);
+            }
+        });
+        btnJump.setOnClickListener(v -> {
+            dialog.dismiss();
+            jumpToDayFromWeekGrid(dayIdx);
+        });
+
+        dialog.show();
+        GlassSurfaceHelper.applyGlassDialog(dialog, root);
+        Window window = dialog.getWindow();
+        if (window != null) {
+            int width = (int) (getResources().getDisplayMetrics().widthPixels * 0.90);
+            window.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
     }
 
     private void setupBottomDock() {
@@ -946,27 +1250,7 @@ public class MainActivity extends AppCompatActivity {
                     isSelected ? R.color.glass_accent : R.color.glass_text_primary));
             chip.setTypeface(null, isSelected ? Typeface.BOLD : Typeface.NORMAL);
 
-            chip.setOnClickListener(v -> {
-                if (!fav.getName().equalsIgnoreCase(selName)) {
-                    selType = fav.getType();
-                    selName = fav.getName();
-                    repo.saveSelection(selType, selName);
-                    if (excludedSubjectsManager != null) {
-                        pagerAdapter.setExcludedSubjects(excludedSubjectsManager.getExcludedSubjects(selName));
-                    }
-                    tvSelectionName.setText(selName);
-                    tvSelectionType.setText(fav.isGroup() ? "Группа" : "Преподаватель");
-                    clearWeekCache();
-                    loadWeek();
-                    updateFavoritesBar();
-                    if (attendanceManager != null) {
-                        attendanceManager.invalidateCache();
-                    }
-                    WidgetUpdateHelper.updateAllWidgets(this);
-                    ReminderScheduler.rescheduleAll(this);
-                    LiveLessonService.syncNow(this);
-                }
-            });
+            chip.setOnClickListener(v -> switchSelection(fav.getType(), fav.getName()));
 
             chip.setOnLongClickListener(v -> {
                 showFavoriteActionsDialog(fav);
@@ -1047,7 +1331,14 @@ public class MainActivity extends AppCompatActivity {
                 },
                 () -> {
                     String dateIso = date.toString();
-                    pagerAdapter.updateNotesForDate(dateIso, repo.getNotesForDate(dateIso));
+                    Map<Integer, LessonNote> updatedNotes = repo.getNotesForDate(dateIso);
+                    if (updatedNotes != null) {
+                        weekNotesByDate.put(dateIso, updatedNotes);
+                    } else {
+                        weekNotesByDate.remove(dateIso);
+                    }
+                    pagerAdapter.updateNotesForDate(dateIso, updatedNotes);
+                    updateWeekGridUi();
                     updateDockMoreBadge();
                 }
         );
@@ -1144,6 +1435,7 @@ public class MainActivity extends AppCompatActivity {
     private void onAttendanceStateChanged() {
         if (attendanceManager != null) attendanceManager.invalidateCache();
         pagerAdapter.notifyDataSetChanged();
+        updateWeekGridUi();
         updateClock();
         WidgetUpdateHelper.updateAllWidgets(this);
         ReminderScheduler.rescheduleAll(this);
@@ -1226,11 +1518,15 @@ public class MainActivity extends AppCompatActivity {
         updateFavoritesBar();
         if (excludedSubjectsManager != null) {
             pagerAdapter.setExcludedSubjects(excludedSubjectsManager.getExcludedSubjects(selName));
+            if (weekGridView != null) {
+                weekGridView.setExcludedSubjects(excludedSubjectsManager.getExcludedSubjects(selName));
+            }
         }
         if (attendanceManager != null) {
             attendanceManager.invalidateCache();
         }
         pagerAdapter.notifyDataSetChanged();
+        updateWeekGridUi();
         WidgetUpdateHelper.updateAllWidgets(this);
         LiveLessonService.syncNow(this);
         clockHandler.removeCallbacks(clockTick);
@@ -1356,6 +1652,7 @@ public class MainActivity extends AppCompatActivity {
     private void clearWeekCache() {
         weekController.clearCache();
         currentWeek = null;
+        weekNotesByDate.clear();
         if (pagerAdapter != null) {
             pagerAdapter.clearWeeks();
         }
@@ -1366,23 +1663,32 @@ public class MainActivity extends AppCompatActivity {
         boolean springPub = repo.isSemesterPublished(SemesterManager.SEMESTER_SPRING);
         pagerAdapter.setSemesterPublished(SemesterManager.SEMESTER_FALL, fallPub);
         pagerAdapter.setSemesterPublished(SemesterManager.SEMESTER_SPRING, springPub);
+        if (weekGridView != null) {
+            weekGridView.setSemesterPublished(SemesterManager.SEMESTER_FALL, fallPub);
+            weekGridView.setSemesterPublished(SemesterManager.SEMESTER_SPRING, springPub);
+        }
         updateWeekHeaderUi();
 
         if (!repo.isSemesterPublished(activeSemesterId)) {
             progressBar.setVisibility(View.GONE);
             currentWeek = null;
             updateDayTabsForWeek();
+            updateWeekGridUi();
             prefetchCrossSemesterBoundary();
             return;
         }
 
         final String targetSem = activeSemesterId;
         boolean cachedHit = weekController.loadWeek(weekNum, targetSem, selType, selName, (loadedWeek, ws, notesMap, isTarget) -> {
+            if (notesMap != null && !notesMap.isEmpty()) {
+                weekNotesByDate.putAll(notesMap);
+            }
             pagerAdapter.setWeekSchedule(targetSem, loadedWeek, ws, notesMap);
             if (loadedWeek == weekNum && targetSem.equals(activeSemesterId)) {
                 currentWeek = ws;
                 progressBar.setVisibility(View.GONE);
                 updateDayTabsForWeek();
+                updateWeekGridUi();
                 updateClock();
                 LiveLessonService.syncNow(this);
             }
@@ -1392,6 +1698,7 @@ public class MainActivity extends AppCompatActivity {
             currentWeek = weekController.getCachedWeek(weekNum, targetSem);
             progressBar.setVisibility(View.GONE);
             updateDayTabsForWeek();
+            updateWeekGridUi();
             updateClock();
         } else {
             progressBar.setVisibility(View.VISIBLE);
@@ -1441,6 +1748,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateClock() {
         ScheduleClock.State st = ScheduleClock.compute();
+        lastClockState = st;
         if (ambientBackdrop != null) {
             ambientBackdrop.setLessonActive(st != null && st.current != null);
         }
@@ -1452,6 +1760,9 @@ public class MainActivity extends AppCompatActivity {
             nextKey = new ScheduleClock.LessonKey(next.getDayOfWeek(), next.getLessonNumber(), next.getDate());
         }
         pagerAdapter.updateClockOnly(st, nextKey, next);
+        if (weekGridView != null && isWeekGridMode) {
+            weekGridView.updateClock(st);
+        }
         WidgetUpdateHelper.updateAllWidgets(this);
         LiveLessonService.syncNow(this);
     }
@@ -1586,6 +1897,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
+        outState.putBoolean(KEY_WEEK_GRID_MODE, isWeekGridMode);
         if (pendingPhotoDateIso != null && pendingPhotoLessonNum > 0) {
             outState.putString(KEY_PENDING_PHOTO_DATE, pendingPhotoDateIso);
             outState.putInt(KEY_PENDING_PHOTO_LESSON, pendingPhotoLessonNum);
